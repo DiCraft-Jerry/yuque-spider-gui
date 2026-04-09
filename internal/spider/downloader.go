@@ -57,7 +57,10 @@ func (d *Downloader) SaveDocument(bookID int, slug, docURL, bookURL, title, pare
 	}
 
 	// markdown 才执行图片重写
-	markdown := d.processImages(docData.SourceCode, filepath.Dir(filePath))
+	markdown, processErr := d.processImages(docData.SourceCode, filepath.Dir(filePath))
+	if processErr != nil {
+		return processErr
+	}
 	if err := os.WriteFile(filePath, []byte(markdown), 0644); err != nil {
 		return fmt.Errorf("写入文件失败: %w", err)
 	}
@@ -66,13 +69,16 @@ func (d *Downloader) SaveDocument(bookID int, slug, docURL, bookURL, title, pare
 }
 
 // processImages 处理 Markdown 中的图片
-func (d *Downloader) processImages(markdown, docDir string) string {
+func (d *Downloader) processImages(markdown, docDir string) (string, error) {
 	// 创建 assets 目录
 	assetsDir := filepath.Join(docDir, "assets")
-	os.MkdirAll(assetsDir, 0755)
+	if err := os.MkdirAll(assetsDir, 0755); err != nil {
+		return markdown, fmt.Errorf("创建图片目录失败: %w", err)
+	}
 
 	// 正则匹配图片链接
 	imgRegex := regexp.MustCompile(`!\[.*?\]\((.*?)\)`)
+	var firstErr error
 
 	result := imgRegex.ReplaceAllStringFunc(markdown, func(match string) string {
 		// 提取 URL
@@ -105,6 +111,9 @@ func (d *Downloader) processImages(markdown, docDir string) string {
 		imageData, err := d.fetcher.DownloadImage(imageURL)
 		if err != nil {
 			fmt.Printf("图片下载失败 %s: %v\n", imageURL, err)
+			if d.config.FailOnImageError && firstErr == nil {
+				firstErr = fmt.Errorf("图片下载失败 %s: %w", imageURL, err)
+			}
 			return match
 		}
 
@@ -112,6 +121,9 @@ func (d *Downloader) processImages(markdown, docDir string) string {
 		imagePath := filepath.Join(assetsDir, imageName)
 		if err := os.WriteFile(imagePath, imageData, 0644); err != nil {
 			fmt.Printf("保存图片失败 %s: %v\n", imagePath, err)
+			if d.config.FailOnImageError && firstErr == nil {
+				firstErr = fmt.Errorf("保存图片失败 %s: %w", imagePath, err)
+			}
 			return match
 		}
 
@@ -119,7 +131,10 @@ func (d *Downloader) processImages(markdown, docDir string) string {
 		return fmt.Sprintf("![image-%d](./assets/%s)", timestamp, imageName)
 	})
 
-	return result
+	if firstErr != nil {
+		return result, firstErr
+	}
+	return result, nil
 }
 
 // cleanFileName 清理文件名中的非法字符

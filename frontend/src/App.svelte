@@ -41,9 +41,11 @@
     delayMin: 1,
     delayMax: 4,
     timeout: 30,
+    imageTimeout: 60,
     maxRetries: 3,
     concurrentDownloads: 1,
-    downloadMode: 'lake'
+    downloadMode: 'lake',
+    failOnImageError: false
   };
 
   $: stats = {
@@ -341,10 +343,21 @@
             <input type="number" bind:value={config.timeout} min="10" max="120" />
           </div>
           <div class="config-item">
+            <label>图片超时 (秒)</label>
+            <input type="number" bind:value={config.imageTimeout} min="10" max="300" />
+          </div>
+          <div class="config-item">
             <label>文档类型</label>
             <select bind:value={config.downloadMode}>
               <option value="md">md</option>
               <option value="lake">lake</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label>图片失败策略</label>
+            <select bind:value={config.failOnImageError}>
+              <option value={false}>继续下载文档</option>
+              <option value={true}>文档下载失败</option>
             </select>
           </div>
         </div>

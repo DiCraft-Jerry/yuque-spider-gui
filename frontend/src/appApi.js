@@ -13,9 +13,11 @@ const defaultConfigFallback = () => ({
   delayMin: 1,
   delayMax: 4,
   timeout: 30,
+  imageTimeout: 60,
   maxRetries: 3,
   concurrentDownloads: 1,
-  downloadMode: 'lake'
+  downloadMode: 'lake',
+  failOnImageError: false
 })
 
 export async function GetDefaultConfig() {

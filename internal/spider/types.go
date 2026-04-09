@@ -10,12 +10,16 @@ type Config struct {
 	DelayMax int `json:"delayMax"`
 	// Timeout 请求超时时间(秒)
 	Timeout int `json:"timeout"`
+	// ImageTimeout 图片下载超时时间(秒)
+	ImageTimeout int `json:"imageTimeout"`
 	// MaxRetries 最大重试次数
 	MaxRetries int `json:"maxRetries"`
 	// ConcurrentDownloads 并发下载数
 	ConcurrentDownloads int `json:"concurrentDownloads"`
 	// DownloadMode 下载模式: md 或 lake
 	DownloadMode string `json:"downloadMode"`
+	// FailOnImageError 图片下载失败时是否使文档失败
+	FailOnImageError bool `json:"failOnImageError"`
 }
 
 // DefaultConfig 默认配置
@@ -24,9 +28,11 @@ func DefaultConfig() Config {
 		DelayMin:            1,
 		DelayMax:            4,
 		Timeout:             30,
+		ImageTimeout:        60,
 		MaxRetries:          3,
 		ConcurrentDownloads: 1,
 		DownloadMode:        "lake",
+		FailOnImageError:    false,
 	}
 }
 

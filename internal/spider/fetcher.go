@@ -2,6 +2,7 @@ package spider
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -138,23 +139,69 @@ func (f *Fetcher) FetchDocument(_ int, slug, docURL, bookURL string) (*DocData, 
 
 // DownloadImage 下载图片
 func (f *Fetcher) DownloadImage(imageURL string) ([]byte, error) {
-	req, err := http.NewRequest("GET", imageURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	f.applyCommonHeaders(req)
-
-	resp, err := f.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("图片下载失败,状态码: %d", resp.StatusCode)
+	maxRetries := f.config.MaxRetries
+	if maxRetries < 0 {
+		maxRetries = 0
 	}
 
-	return io.ReadAll(resp.Body)
+	timeoutSeconds := f.config.ImageTimeout
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 60
+	}
+	if timeoutSeconds < 10 {
+		timeoutSeconds = 10
+	}
+
+	imageClient := &http.Client{
+		Timeout: time.Duration(timeoutSeconds) * time.Second,
+	}
+
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		req, err := http.NewRequest("GET", imageURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		f.applyCommonHeaders(req)
+		req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+
+		resp, err := imageClient.Do(req)
+		if err != nil {
+			lastErr = err
+			if attempt < maxRetries && isRetryableImageError(err) {
+				time.Sleep(time.Duration(attempt+1) * time.Second)
+				continue
+			}
+			return nil, err
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			if attempt < maxRetries && isRetryableImageError(readErr) {
+				time.Sleep(time.Duration(attempt+1) * time.Second)
+				continue
+			}
+			return nil, readErr
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			return body, nil
+		}
+
+		lastErr = fmt.Errorf("图片下载失败,状态码: %d", resp.StatusCode)
+		if attempt < maxRetries && resp.StatusCode >= 500 {
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+			continue
+		}
+		return nil, lastErr
+	}
+
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("图片下载失败")
 }
 
 func (f *Fetcher) applyCommonHeaders(req *http.Request) {
@@ -509,4 +556,18 @@ func detectLakeFileExt(contentDisposition, contentType string) string {
 	default:
 		return ".md"
 	}
+}
+
+func isRetryableImageError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "temporarily unavailable") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "broken pipe")
 }
