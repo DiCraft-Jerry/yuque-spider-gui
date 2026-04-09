@@ -33,18 +33,31 @@ func (d *Downloader) SaveDocument(bookID int, slug, docURL, bookURL, title, pare
 		return fmt.Errorf("获取文档失败: %w", err)
 	}
 
-	// 创建文件路径
-	filePath := filepath.Join(d.outputPath, parentPath, cleanFileName(title)+".md")
+	ext := docData.FileExt
+	if ext == "" {
+		ext = ".md"
+	}
+	filePath := filepath.Join(d.outputPath, parentPath, cleanFileName(title)+ext)
 
 	// 确保目录存在
 	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 		return fmt.Errorf("创建目录失败: %w", err)
 	}
 
-	// 下载并替换图片链接
-	markdown := d.processImages(docData.SourceCode, filepath.Dir(filePath))
+	// 非 markdown 内容直接按原始字节保存
+	if ext != ".md" {
+		content := docData.RawContent
+		if len(content) == 0 {
+			content = []byte(docData.SourceCode)
+		}
+		if err := os.WriteFile(filePath, content, 0644); err != nil {
+			return fmt.Errorf("写入文件失败: %w", err)
+		}
+		return nil
+	}
 
-	// 写入文件
+	// markdown 才执行图片重写
+	markdown := d.processImages(docData.SourceCode, filepath.Dir(filePath))
 	if err := os.WriteFile(filePath, []byte(markdown), 0644); err != nil {
 		return fmt.Errorf("写入文件失败: %w", err)
 	}

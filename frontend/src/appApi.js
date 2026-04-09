@@ -14,7 +14,8 @@ const defaultConfigFallback = () => ({
   delayMax: 4,
   timeout: 30,
   maxRetries: 3,
-  concurrentDownloads: 1
+  concurrentDownloads: 1,
+  downloadMode: 'lake'
 })
 
 export async function GetDefaultConfig() {

@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -111,9 +113,22 @@ func (f *Fetcher) FetchBookData(rawURL string) (*YuqueData, error) {
 	return &yuqueData, nil
 }
 
-// FetchDocument 获取文档内容（仅使用 lake 下载方式）
+// FetchDocument 获取文档内容
 func (f *Fetcher) FetchDocument(_ int, slug, docURL, bookURL string) (*DocData, error) {
 	docSlug := normalizeDocSlug(slug)
+	mode := strings.ToLower(strings.TrimSpace(f.config.DownloadMode))
+	if mode == "" {
+		mode = "lake"
+	}
+
+	if mode == "md" {
+		mdDoc, mdErr := f.fetchDocumentFromMarkdown(docURL, docSlug, bookURL)
+		if mdErr == nil {
+			return mdDoc, nil
+		}
+		return nil, fmt.Errorf("文档下载失败: %w", mdErr)
+	}
+
 	lakeDoc, lakeErr := f.fetchDocumentFromLake(docURL, docSlug, bookURL)
 	if lakeErr == nil {
 		return lakeDoc, nil
@@ -190,8 +205,8 @@ func normalizeDocSlug(slug string) string {
 	return raw
 }
 
-func (f *Fetcher) fetchDocumentFromPage(docURL string) (*DocData, error) {
-	fullURL := normalizeDocURL(docURL)
+func (f *Fetcher) fetchDocumentFromPage(docURL, docSlug, bookURL string) (*DocData, error) {
+	fullURL := buildDocumentURL(docURL, docSlug, bookURL)
 	if fullURL == "" {
 		return nil, fmt.Errorf("文档页面地址为空")
 	}
@@ -228,6 +243,8 @@ func (f *Fetcher) fetchDocumentFromPage(docURL string) (*DocData, error) {
 	return &DocData{
 		Title:      title,
 		SourceCode: sourceCode,
+		FileExt:    ".md",
+		RawContent: []byte(sourceCode),
 	}, nil
 }
 
@@ -266,9 +283,58 @@ func (f *Fetcher) fetchDocumentFromLake(docURL, docSlug, bookURL string) (*DocDa
 		return nil, fmt.Errorf("lake 响应不是文档内容, 链接: %s", lakeURL)
 	}
 
+	fileExt := detectLakeFileExt(resp.Header.Get("Content-Disposition"), resp.Header.Get("Content-Type"))
+	if fileExt == "" {
+		fileExt = ".md"
+	}
+
 	return &DocData{
 		Title:      docSlug,
 		SourceCode: content,
+		FileExt:    fileExt,
+		RawContent: body,
+	}, nil
+}
+
+func (f *Fetcher) fetchDocumentFromMarkdown(docURL, docSlug, bookURL string) (*DocData, error) {
+	markdownURL := buildMarkdownURL(docURL, docSlug, bookURL)
+	if markdownURL == "" {
+		return nil, fmt.Errorf("markdown 下载地址为空")
+	}
+	fmt.Printf("文档下载链接(%s): %s\n", docSlug, markdownURL)
+
+	req, err := http.NewRequest("GET", markdownURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	f.applyCommonHeaders(req)
+	req.Header.Set("Accept", "text/markdown,text/plain,*/*")
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("markdown 下载失败,状态码: %d, 链接: %s", resp.StatusCode, markdownURL)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	content := string(body)
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" || strings.HasPrefix(strings.ToLower(trimmed), "<!doctype html") || strings.HasPrefix(strings.ToLower(trimmed), "<html") {
+		return nil, fmt.Errorf("markdown 响应不是文档内容, 链接: %s", markdownURL)
+	}
+
+	return &DocData{
+		Title:      docSlug,
+		SourceCode: content,
+		FileExt:    ".md",
+		RawContent: body,
 	}, nil
 }
 
@@ -317,6 +383,30 @@ func buildLakeURL(docURL, docSlug, bookURL string) string {
 	u.Path = strings.TrimRight(u.Path, "/") + "/lake"
 	q := u.Query()
 	q.Set("attachment", "true")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func buildMarkdownURL(docURL, docSlug, bookURL string) string {
+	fullURL := buildDocumentURL(docURL, docSlug, bookURL)
+	if fullURL == "" {
+		return ""
+	}
+
+	u, err := url.Parse(fullURL)
+	if err != nil {
+		return ""
+	}
+
+	u.RawQuery = ""
+	u.Fragment = ""
+	u.Path = strings.TrimRight(u.Path, "/") + "/markdown"
+	q := u.Query()
+	q.Set("attachment", "true")
+	q.Set("latexcode", "false")
+	q.Set("anchor", "true")
+	q.Set("linebreak", "true")
+	q.Set("useMdai", "true")
 	u.RawQuery = q.Encode()
 	return u.String()
 }
@@ -381,4 +471,42 @@ func splitPathSegments(path string) []string {
 		return nil
 	}
 	return strings.Split(raw, "/")
+}
+
+func detectLakeFileExt(contentDisposition, contentType string) string {
+	if contentDisposition != "" {
+		_, params, err := mime.ParseMediaType(contentDisposition)
+		if err == nil {
+			filename := params["filename"]
+			if filename == "" {
+				filename = params["filename*"]
+			}
+			if filename != "" {
+				if strings.HasPrefix(strings.ToLower(filename), "utf-8''") {
+					if decoded, err := url.QueryUnescape(filename[7:]); err == nil {
+						filename = decoded
+					}
+				}
+				if ext := strings.ToLower(filepath.Ext(filename)); ext != "" {
+					return ext
+				}
+			}
+		}
+	}
+
+	ct := strings.ToLower(contentType)
+	switch {
+	case strings.Contains(ct, "text/markdown"):
+		return ".md"
+	case strings.Contains(ct, "application/json"):
+		return ".json"
+	case strings.Contains(ct, "text/plain"):
+		return ".txt"
+	case strings.Contains(ct, "application/pdf"):
+		return ".pdf"
+	case strings.Contains(ct, "application/zip"):
+		return ".zip"
+	default:
+		return ".md"
+	}
 }

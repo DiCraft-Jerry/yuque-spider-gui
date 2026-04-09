@@ -14,6 +14,8 @@ type Config struct {
 	MaxRetries int `json:"maxRetries"`
 	// ConcurrentDownloads 并发下载数
 	ConcurrentDownloads int `json:"concurrentDownloads"`
+	// DownloadMode 下载模式: md 或 lake
+	DownloadMode string `json:"downloadMode"`
 }
 
 // DefaultConfig 默认配置
@@ -24,6 +26,7 @@ func DefaultConfig() Config {
 		Timeout:             30,
 		MaxRetries:          3,
 		ConcurrentDownloads: 1,
+		DownloadMode:        "lake",
 	}
 }
 
@@ -58,6 +61,8 @@ type DocData struct {
 	Slug       string `json:"slug"`
 	Title      string `json:"title"`
 	SourceCode string `json:"sourcecode"`
+	FileExt    string `json:"-"`
+	RawContent []byte `json:"-"`
 }
 
 // YuqueData 页面中的数据

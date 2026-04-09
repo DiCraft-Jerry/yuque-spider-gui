@@ -42,7 +42,8 @@
     delayMax: 4,
     timeout: 30,
     maxRetries: 3,
-    concurrentDownloads: 1
+    concurrentDownloads: 1,
+    downloadMode: 'lake'
   };
 
   $: stats = {
@@ -339,6 +340,13 @@
             <label>超时 (秒)</label>
             <input type="number" bind:value={config.timeout} min="10" max="120" />
           </div>
+          <div class="config-item">
+            <label>文档类型</label>
+            <select bind:value={config.downloadMode}>
+              <option value="md">md</option>
+              <option value="lake">lake</option>
+            </select>
+          </div>
         </div>
       </section>
 
@@ -625,7 +633,8 @@
     gap: 8px;
   }
 
-  .config-item input {
+  .config-item input,
+  .config-item select {
     width: 100%;
     padding: 8px 10px;
     border-radius: 8px;
@@ -635,7 +644,8 @@
     font-size: 0.85rem;
   }
 
-  .config-item input:focus {
+  .config-item input:focus,
+  .config-item select:focus {
     outline: 2px solid #6366f1;
     outline-offset: 2px;
   }
