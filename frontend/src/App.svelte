@@ -1,5 +1,6 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
   import {
     AddTask,
     RemoveTask,
@@ -60,6 +61,34 @@
 
   let errorMessage = '';
   let successMessage = '';
+  let hintTimer;
+
+  function clearHintTimer() {
+    if (hintTimer) {
+      clearTimeout(hintTimer);
+      hintTimer = undefined;
+    }
+  }
+
+  function showSuccess(message, duration = 2500) {
+    clearHintTimer();
+    errorMessage = '';
+    successMessage = message;
+    hintTimer = setTimeout(() => {
+      successMessage = '';
+      hintTimer = undefined;
+    }, duration);
+  }
+
+  function showError(message, duration = 4000) {
+    clearHintTimer();
+    successMessage = '';
+    errorMessage = message;
+    hintTimer = setTimeout(() => {
+      errorMessage = '';
+      hintTimer = undefined;
+    }, duration);
+  }
 
   onMount(async () => {
     const defaultConfig = await GetDefaultConfig();
@@ -80,6 +109,10 @@
         hydrateDefaultOutput(tasks);
       }
     });
+  });
+
+  onDestroy(() => {
+    clearHintTimer();
   });
 
   function hydrateDefaultOutput(taskList) {
@@ -110,44 +143,41 @@
       if (dir) {
         defaultOutputPath = dir;
         newTask.outputPath = dir;
-        successMessage = '已更新默认输出目录';
-        errorMessage = '';
-        setTimeout(() => successMessage = '', 2500);
+        showSuccess('已更新默认输出目录');
       }
     } catch (err) {
       console.error('选择目录失败:', err);
-      errorMessage = '选择目录失败';
+      showError('选择目录失败');
     }
   }
 
   async function addTask() {
+    clearHintTimer();
     errorMessage = '';
     successMessage = '';
 
     const isValid = await ValidateURL(newTask.url);
     if (!isValid) {
-      errorMessage = '请输入有效的语雀 URL';
+      showError('请输入有效的语雀 URL');
       return;
     }
 
     const targetOutputPath = newTask.outputPath || defaultOutputPath;
     if (!targetOutputPath) {
-      errorMessage = '请选择输出目录';
+      showError('请选择输出目录');
       return;
     }
 
     try {
       await AddTask(newTask.url, newTask.cookie, targetOutputPath, config);
-      successMessage = '任务添加成功';
+      showSuccess('任务添加成功');
 
       defaultOutputPath = targetOutputPath;
       newTask.outputPath = targetOutputPath;
       newTask.url = '';
       newTask.cookie = '';
-
-      setTimeout(() => successMessage = '', 3000);
     } catch (err) {
-      errorMessage = '添加任务失败: ' + err;
+      showError('添加任务失败: ' + err);
     }
   }
 
@@ -155,7 +185,7 @@
     try {
       await RemoveTask(taskId);
     } catch (err) {
-      errorMessage = '删除任务失败: ' + err;
+      showError('删除任务失败: ' + err);
     }
   }
 
@@ -163,7 +193,7 @@
     try {
       await StartTask(taskId);
     } catch (err) {
-      errorMessage = '启动任务失败: ' + err;
+      showError('启动任务失败: ' + err);
     }
   }
 
@@ -171,27 +201,25 @@
     try {
       await CancelTask(taskId);
     } catch (err) {
-      errorMessage = '取消任务失败: ' + err;
+      showError('取消任务失败: ' + err);
     }
   }
 
   async function startAllPending() {
     try {
       await StartAllPendingTasks();
-      successMessage = '已启动所有待处理任务';
-      setTimeout(() => successMessage = '', 3000);
+      showSuccess('已启动所有待处理任务');
     } catch (err) {
-      errorMessage = '启动任务失败: ' + err;
+      showError('启动任务失败: ' + err);
     }
   }
 
   async function clearCompleted() {
     try {
       await ClearCompletedTasks();
-      successMessage = '已清除完成或失败的任务';
-      setTimeout(() => successMessage = '', 3000);
+      showSuccess('已清除完成或失败的任务');
     } catch (err) {
-      errorMessage = '清除任务失败: ' + err;
+      showError('清除任务失败: ' + err);
     }
   }
 
@@ -216,18 +244,20 @@
   }
 
   async function importBatch() {
+    clearHintTimer();
     errorMessage = '';
+    successMessage = '';
 
     const targetOutputPath = newTask.outputPath || defaultOutputPath;
     if (!targetOutputPath) {
-      errorMessage = '请先选择输出目录';
+      showError('请先选择输出目录');
       return;
     }
 
     const batchTasks = parseBatchInput();
 
     if (batchTasks.length === 0) {
-      errorMessage = '没有有效的任务';
+      showError('没有有效的任务');
       return;
     }
 
@@ -244,8 +274,7 @@
     defaultOutputPath = targetOutputPath;
     newTask.outputPath = targetOutputPath;
 
-    successMessage = `成功添加 ${successCount}/${batchTasks.length} 个任务`;
-    setTimeout(() => successMessage = '', 3000);
+    showSuccess(`成功添加 ${successCount}/${batchTasks.length} 个任务`);
 
     showBatchModal = false;
     batchInput = '';
@@ -373,6 +402,19 @@
     </div>
   </header>
 
+  <div class="floating-hints" aria-live="polite" aria-atomic="true">
+    {#if errorMessage}
+      <div class="hint-toast hint-error" transition:fade={{ duration: 180 }}>
+        ❌ {errorMessage}
+      </div>
+    {/if}
+    {#if successMessage}
+      <div class="hint-toast hint-success" transition:fade={{ duration: 180 }}>
+        ✅ {successMessage}
+      </div>
+    {/if}
+  </div>
+
   <div class="app-shell">
     <aside class="app-sidebar">
       <section class="sidebar-block">
@@ -425,13 +467,6 @@
     </aside>
 
     <section class="app-content">
-      {#if errorMessage}
-        <div class="alert alert-error">❌ {errorMessage}</div>
-      {/if}
-      {#if successMessage}
-        <div class="alert alert-success">✅ {successMessage}</div>
-      {/if}
-
       <div class="card">
         <h2 class="card-title">新建任务</h2>
         <div class="form-grid">
@@ -583,8 +618,13 @@
   .admin-app {
     --bg-page: #f3f4f6;
     --bg-panel: #ffffff;
-    --bg-sidebar: linear-gradient(180deg, #0f172a 0%, #111827 100%);
-    --bg-sidebar-card: rgba(30, 41, 59, 0.56);
+    --bg-sidebar: #f8fafc;
+    --bg-sidebar-card: #ffffff;
+    --sidebar-text-main: #1f2937;
+    --sidebar-text-sub: #64748b;
+    --sidebar-border: #dbe2ea;
+    --sidebar-input-bg: #f8fafc;
+    --sidebar-input-border: #d0d7e2;
     --text-main: #1f2937;
     --text-sub: #6b7280;
     --line: #e5e7eb;
@@ -595,6 +635,11 @@
     --bg-panel: #111827;
     --bg-sidebar: linear-gradient(180deg, #0b1220 0%, #111827 100%);
     --bg-sidebar-card: rgba(17, 24, 39, 0.72);
+    --sidebar-text-main: #e5e7eb;
+    --sidebar-text-sub: #9ca3af;
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+    --sidebar-input-bg: rgba(2, 6, 23, 0.5);
+    --sidebar-input-border: rgba(148, 163, 184, 0.2);
     --text-main: #e5e7eb;
     --text-sub: #9ca3af;
     --line: #233043;
@@ -809,7 +854,7 @@
   .app-sidebar {
     width: 280px;
     background: var(--bg-sidebar);
-    color: #d1d5db;
+    color: var(--sidebar-text-main);
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -821,14 +866,14 @@
     background: var(--bg-sidebar-card);
     border-radius: 12px;
     padding: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--sidebar-border);
   }
 
   .sidebar-block h3 {
     margin: 0 0 12px 0;
     font-size: 0.95rem;
     font-weight: 600;
-    color: #ffffff;
+    color: var(--sidebar-text-main);
   }
 
   .output-selector {
@@ -838,7 +883,8 @@
   }
 
   .output-path {
-    background: rgba(55, 65, 81, 0.6);
+    background: var(--sidebar-input-bg);
+    border: 1px solid var(--sidebar-input-border);
     border-radius: 8px;
     padding: 10px 12px;
     font-size: 0.85rem;
@@ -848,7 +894,7 @@
   .sidebar-hint {
     margin: 8px 0 0;
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: var(--sidebar-text-sub);
   }
 
   .config-grid {
@@ -860,7 +906,7 @@
   .config-item label {
     display: block;
     font-size: 0.8rem;
-    color: #d1d5db;
+    color: var(--sidebar-text-main);
     margin-bottom: 8px;
   }
 
@@ -875,9 +921,9 @@
     width: 100%;
     padding: 8px 10px;
     border-radius: 8px;
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    background: rgba(15, 23, 42, 0.42);
-    color: #f3f4f6;
+    border: 1px solid var(--sidebar-input-border);
+    background: var(--sidebar-input-bg);
+    color: var(--sidebar-text-main);
     font-size: 0.85rem;
     box-sizing: border-box;
   }
@@ -894,8 +940,8 @@
     -webkit-appearance: none;
     -moz-appearance: none;
     padding-right: 34px;
-    background-image: linear-gradient(45deg, transparent 50%, #9ca3af 50%),
-      linear-gradient(135deg, #9ca3af 50%, transparent 50%);
+    background-image: linear-gradient(45deg, transparent 50%, var(--sidebar-text-sub) 50%),
+      linear-gradient(135deg, var(--sidebar-text-sub) 50%, transparent 50%);
     background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
     background-size: 6px 6px, 6px 6px;
     background-repeat: no-repeat;
@@ -903,19 +949,8 @@
   }
 
   .config-item select option {
-    background: #0f172a;
-    color: #e5e7eb;
-  }
-
-  .theme-dark .config-item input,
-  .theme-dark .config-item select {
-    border-color: rgba(148, 163, 184, 0.2);
-    background: rgba(2, 6, 23, 0.5);
-  }
-
-  .theme-dark .config-item select option {
-    background: #0b1220;
-    color: #e5e7eb;
+    background: var(--bg-panel);
+    color: var(--text-main);
   }
 
   .helper-list {
@@ -1062,22 +1097,64 @@
     background: rgba(79, 70, 229, 0.08);
   }
 
-  .alert {
-    border-radius: 10px;
-    padding: 12px 16px;
-    font-size: 0.9rem;
+  .floating-hints {
+    position: fixed;
+    top: 86px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    width: min(560px, calc(100vw - 24px));
   }
 
-  .alert-error {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
+  .hint-toast {
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 0.98rem;
+    line-height: 1.5;
+    border: 1px solid transparent;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.24);
+    backdrop-filter: blur(3px);
+    animation: toastIn 0.18s ease;
+    text-align: center;
+  }
+
+  .hint-error {
+    background: rgba(254, 242, 242, 0.94);
+    border-color: #fecaca;
     color: #b91c1c;
   }
 
-  .alert-success {
-    background: #f0fdf4;
-    border: 1px solid #86efac;
+  .hint-success {
+    background: rgba(240, 253, 244, 0.94);
+    border-color: #86efac;
     color: #166534;
+  }
+
+  .theme-dark .hint-error {
+    background: rgba(127, 29, 29, 0.9);
+    border-color: #b91c1c;
+    color: #fecaca;
+  }
+
+  .theme-dark .hint-success {
+    background: rgba(20, 83, 45, 0.9);
+    border-color: #16a34a;
+    color: #bbf7d0;
+  }
+
+  @keyframes toastIn {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .empty-state {
