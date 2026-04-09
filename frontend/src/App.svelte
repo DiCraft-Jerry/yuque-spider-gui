@@ -36,6 +36,8 @@
 
   let batchInput = '';
   let showBatchModal = false;
+  let showHelpTip = false;
+  let theme = 'light';
 
   let config = {
     delayMin: 1,
@@ -281,13 +283,35 @@
       minute: '2-digit'
     });
   }
+
+  function toggleTheme() {
+    theme = theme === 'light' ? 'dark' : 'light';
+  }
+
+  function toggleHelpTip() {
+    if (showHelpTip) {
+      showHelpTip = false;
+      return;
+    }
+    showHelpTip = true;
+  }
+
+  /** @param {MouseEvent} event */
+  function handleGlobalClick(event) {
+    if (!showHelpTip) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('.help-tooltip')) return;
+    showHelpTip = false;
+  }
 </script>
 
-<main class="admin-app">
+<svelte:window on:click={handleGlobalClick} />
+
+<main class={`admin-app ${theme === 'dark' ? 'theme-dark' : ''}`}>
   <header class="app-header">
     <div class="brand">
       <div class="brand-title">语雀下载器</div>
-      <div class="brand-subtitle">Yuque Spider Desktop</div>
     </div>
     <div class="header-stats">
       <div class="metric">
@@ -308,9 +332,44 @@
       </div>
     </div>
     <div class="header-actions">
-      <button on:click={() => showBatchModal = true} class="btn btn-outline">批量导入</button>
-      <button on:click={startAllPending} disabled={stats.pending === 0} class="btn btn-primary">开始全部</button>
-      <button on:click={clearCompleted} disabled={stats.completed === 0 && stats.failed === 0} class="btn btn-secondary">清除完成</button>
+      <div class="help-tooltip">
+        <button
+          class={`help-bulb ${showHelpTip ? 'is-active' : ''}`}
+          type="button"
+          on:click|stopPropagation={toggleHelpTip}
+          aria-label="使用提示"
+          title="使用提示"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M9 17h6M10 20h4M8 10a4 4 0 1 1 8 0c0 1.7-.8 2.8-1.8 3.8-.6.6-1.2 1.2-1.2 2.2h-2c0-1-.6-1.6-1.2-2.2C8.8 12.8 8 11.7 8 10Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class={`help-popover ${showHelpTip ? 'is-visible' : ''}`}>
+          <div>1. 先选择输出目录（仅需一次）</div>
+          <div>2. 粘贴知识库 URL 与 Cookie</div>
+          <div>3. 推荐先用 `lake`，md格式在网络波动时，图片会超时</div>
+        </div>
+      </div>
+      <button
+        on:click={toggleTheme}
+        class={`theme-switch ${theme === 'dark' ? 'is-dark' : ''}`}
+        type="button"
+        aria-label="切换主题"
+        title={theme === 'light' ? '切换到夜间模式' : '切换到白天模式'}
+      >
+        <span class="switch-icon switch-sun" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8" />
+            <path d="M12 2.5V5M12 19V21.5M2.5 12H5M19 12H21.5M5.2 5.2L7 7M17 17L18.8 18.8M18.8 5.2L17 7M7 17L5.2 18.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span class="switch-icon switch-moon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M20 14.2A8.2 8.2 0 1 1 9.8 4c-.2.5-.3 1.1-.3 1.7a6.8 6.8 0 0 0 6.8 6.8c1 0 2-.2 2.7-.7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="switch-thumb" aria-hidden="true"></span>
+      </button>
     </div>
   </header>
 
@@ -363,14 +422,6 @@
         </div>
       </section>
 
-      <section class="sidebar-block">
-        <h3>快速指引</h3>
-        <ul class="helper-list">
-          <li>1. 选择输出目录 (仅需一次)</li>
-          <li>2. 粘贴知识库 URL 与 Cookie</li>
-          <li>3. 每个知识库在目录下生成独立文件夹</li>
-        </ul>
-      </section>
     </aside>
 
     <section class="app-content">
@@ -415,7 +466,12 @@
       <div class="card">
         <div class="card-header">
           <h2 class="card-title">任务列表</h2>
-          <div class="card-subtitle">共 {stats.total} 个任务</div>
+          <div class="card-actions">
+            <div class="card-subtitle">共 {stats.total} 个任务</div>
+            <button on:click={() => showBatchModal = true} class="btn btn-outline">批量导入</button>
+            <button on:click={startAllPending} disabled={stats.pending === 0} class="btn btn-primary">开始全部</button>
+            <button on:click={clearCompleted} disabled={stats.completed === 0 && stats.failed === 0} class="btn btn-secondary">清除完成</button>
+          </div>
         </div>
 
         {#if tasks.length === 0}
@@ -525,9 +581,31 @@
   }
 
   .admin-app {
+    --bg-page: #f3f4f6;
+    --bg-panel: #ffffff;
+    --bg-sidebar: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    --bg-sidebar-card: rgba(30, 41, 59, 0.56);
+    --text-main: #1f2937;
+    --text-sub: #6b7280;
+    --line: #e5e7eb;
+  }
+
+  .admin-app.theme-dark {
+    --bg-page: #0b1220;
+    --bg-panel: #111827;
+    --bg-sidebar: linear-gradient(180deg, #0b1220 0%, #111827 100%);
+    --bg-sidebar-card: rgba(17, 24, 39, 0.72);
+    --text-main: #e5e7eb;
+    --text-sub: #9ca3af;
+    --line: #233043;
+  }
+
+  .admin-app {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    background: var(--bg-page);
+    color: var(--text-main);
   }
 
   .app-header {
@@ -535,8 +613,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px 28px;
-    background: #ffffff;
-    border-bottom: 1px solid #e5e7eb;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--line);
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   }
 
@@ -569,12 +647,157 @@
 
   .metric-label {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: var(--text-sub);
   }
 
   .header-actions {
     display: flex;
+    align-items: center;
     gap: 12px;
+  }
+
+  .theme-switch {
+    position: relative;
+    width: 70px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: linear-gradient(90deg, #f8fafc 0%, #e2e8f0 100%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .theme-switch:hover {
+    border-color: #6366f1;
+  }
+
+  .theme-switch.is-dark {
+    background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
+  }
+
+  .switch-icon {
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    color: #64748b;
+    z-index: 1;
+  }
+
+  .switch-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .theme-switch .switch-sun {
+    color: #f59e0b;
+  }
+
+  .theme-switch .switch-moon {
+    color: #64748b;
+  }
+
+  .theme-switch.is-dark .switch-sun {
+    color: #94a3b8;
+  }
+
+  .theme-switch.is-dark .switch-moon {
+    color: #cbd5e1;
+  }
+
+  .switch-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+    transition: transform 0.2s ease;
+  }
+
+  .theme-switch.is-dark .switch-thumb {
+    transform: translateX(36px);
+    background: #cbd5e1;
+  }
+
+  .help-tooltip {
+    position: relative;
+  }
+
+  .help-bulb {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: #ffffff;
+    color: #6b7280;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .help-bulb svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .help-bulb:hover {
+    border-color: #f59e0b;
+    color: #f59e0b;
+  }
+
+  .help-bulb.is-active {
+    background: #fde68a;
+    border-color: #f59e0b;
+    color: #b45309;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.28), 0 0 16px rgba(245, 158, 11, 0.4);
+  }
+
+  .theme-dark .help-bulb {
+    background: #1f2937;
+    color: #94a3b8;
+    border-color: #334155;
+  }
+
+  .theme-dark .help-bulb.is-active {
+    background: #fbbf24;
+    color: #7c2d12;
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.24), 0 0 16px rgba(251, 191, 36, 0.42);
+  }
+
+  .help-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 300px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--text-main);
+    text-align: left;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: all 0.16s ease;
+    z-index: 20;
+  }
+
+  .help-popover.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
   }
 
   .app-shell {
@@ -585,7 +808,7 @@
 
   .app-sidebar {
     width: 280px;
-    background: #111827;
+    background: var(--bg-sidebar);
     color: #d1d5db;
     display: flex;
     flex-direction: column;
@@ -595,9 +818,10 @@
   }
 
   .sidebar-block {
-    background: rgba(31, 41, 55, 0.65);
+    background: var(--bg-sidebar-card);
     border-radius: 12px;
     padding: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .sidebar-block h3 {
@@ -651,16 +875,47 @@
     width: 100%;
     padding: 8px 10px;
     border-radius: 8px;
-    border: none;
-    background: rgba(17, 24, 39, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(15, 23, 42, 0.42);
     color: #f3f4f6;
     font-size: 0.85rem;
+    box-sizing: border-box;
   }
 
   .config-item input:focus,
   .config-item select:focus {
-    outline: 2px solid #6366f1;
-    outline-offset: 2px;
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.28);
+  }
+
+  .config-item select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 34px;
+    background-image: linear-gradient(45deg, transparent 50%, #9ca3af 50%),
+      linear-gradient(135deg, #9ca3af 50%, transparent 50%);
+    background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    cursor: pointer;
+  }
+
+  .config-item select option {
+    background: #0f172a;
+    color: #e5e7eb;
+  }
+
+  .theme-dark .config-item input,
+  .theme-dark .config-item select {
+    border-color: rgba(148, 163, 184, 0.2);
+    background: rgba(2, 6, 23, 0.5);
+  }
+
+  .theme-dark .config-item select option {
+    background: #0b1220;
+    color: #e5e7eb;
   }
 
   .helper-list {
@@ -681,9 +936,9 @@
   }
 
   .card {
-    background: #ffffff;
+    background: var(--bg-panel);
     border-radius: 14px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--line);
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
     padding: 24px;
   }
@@ -691,8 +946,17 @@
   .card-header {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: center;
     margin-bottom: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .card-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
   .card-title {
@@ -703,7 +967,7 @@
 
   .card-subtitle {
     font-size: 0.85rem;
-    color: #6b7280;
+    color: var(--text-sub);
   }
 
   .form-grid {
@@ -721,7 +985,7 @@
   .form-grid input[type="text"] {
     padding: 10px 14px;
     border-radius: 8px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--line);
     font-size: 0.9rem;
     box-sizing: border-box;
   }
@@ -784,6 +1048,16 @@
     border: 1px solid #4f46e5;
   }
 
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-main);
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background: rgba(99, 102, 241, 0.08);
+  }
+
   .btn-outline:hover:not(:disabled) {
     background: rgba(79, 70, 229, 0.08);
   }
@@ -823,11 +1097,11 @@
   }
 
   .task-card {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--line);
     border-radius: 12px;
     padding: 20px;
     margin-bottom: 16px;
-    background: #ffffff;
+    background: var(--bg-panel);
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   }
 
@@ -848,7 +1122,7 @@
   .task-url {
     font-size: 0.95rem;
     font-weight: 600;
-    color: #1f2937;
+    color: var(--text-main);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -924,13 +1198,13 @@
     margin-top: 12px;
     font-size: 0.9rem;
     font-weight: 500;
-    color: #374151;
+    color: var(--text-main);
   }
 
   .task-meta {
     margin-top: 8px;
     font-size: 0.8rem;
-    color: #6b7280;
+    color: var(--text-sub);
     display: flex;
     gap: 8px;
     align-items: baseline;
@@ -953,14 +1227,14 @@
 
   .progress-doc {
     font-size: 0.85rem;
-    color: #4b5563;
+    color: var(--text-sub);
     margin-bottom: 8px;
   }
 
   .progress-bar-container {
     position: relative;
     height: 10px;
-    background: #e5e7eb;
+    background: #243246;
     border-radius: 12px;
     overflow: hidden;
   }
@@ -978,7 +1252,7 @@
     display: flex;
     justify-content: space-between;
     font-size: 0.8rem;
-    color: #6b7280;
+    color: var(--text-sub);
   }
 
   .task-error {
@@ -993,9 +1267,9 @@
   .task-footer {
     margin-top: 16px;
     padding-top: 12px;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid var(--line);
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: var(--text-sub);
     display: flex;
     gap: 16px;
   }
