@@ -340,7 +340,28 @@
 <main class={`admin-app ${theme === 'dark' ? 'theme-dark' : ''}`}>
   <header class="app-header">
     <div class="brand">
-      <div class="brand-title">语雀下载器</div>
+      <div class="brand-main">
+        <svg class="brand-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="brandFrame" x1="12" y1="10" x2="52" y2="54" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#6366F1" />
+              <stop offset="1" stop-color="#8B5CF6" />
+            </linearGradient>
+            <linearGradient id="brandArrow" x1="32" y1="20" x2="32" y2="47" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#22D3EE" />
+              <stop offset="1" stop-color="#2563EB" />
+            </linearGradient>
+          </defs>
+          <rect x="8" y="8" width="48" height="48" rx="14" fill="url(#brandFrame)" />
+          <path d="M22 20C22 18.9 22.9 18 24 18H36L42 24V44C42 45.1 41.1 46 40 46H24C22.9 46 22 45.1 22 44V20Z" fill="white" fill-opacity="0.94" />
+          <path d="M36 18V22.4C36 23.28 36.72 24 37.6 24H42" fill="#E9D5FF" />
+          <path d="M32 26V38" stroke="url(#brandArrow)" stroke-width="3.2" stroke-linecap="round" />
+          <path d="M27 34L32 39L37 34" stroke="url(#brandArrow)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+          <rect x="25.5" y="42" width="13" height="2.8" rx="1.4" fill="#14B8A6" />
+          <circle cx="50" cy="14" r="5" fill="#10B981" stroke="white" stroke-width="1.5" />
+        </svg>
+        <div class="brand-title">语雀下载器</div>
+      </div>
     </div>
     <div class="header-stats">
       <div class="metric">
@@ -666,6 +687,19 @@
   .brand-title {
     font-size: 1.4rem;
     font-weight: 700;
+  }
+
+  .brand-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .brand-icon {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.25));
   }
 
   .brand-subtitle {
