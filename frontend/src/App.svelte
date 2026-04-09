@@ -10,9 +10,19 @@
     ClearCompletedTasks,
     SelectDirectory,
     GetDefaultConfig,
-    ValidateURL
-  } from '../wailsjs/go/main/App.js';
-  import { EventsOn } from '../wailsjs/runtime/runtime.js';
+    ValidateURL,
+    EventsOn,
+    WAILS_BACKEND_ERR,
+    wailsBackendUserMessage
+  } from './appApi.js';
+
+  /** @param {unknown} err @param {string} prefix */
+  function formatAppError(err, prefix) {
+    if (err && typeof err === 'object' && 'message' in err && err.message === WAILS_BACKEND_ERR) {
+      return wailsBackendUserMessage();
+    }
+    return prefix + (err != null ? String(err) : '');
+  }
 
   let tasks = [];
 

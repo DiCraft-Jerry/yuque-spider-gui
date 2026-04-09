@@ -117,15 +117,20 @@ func (s *Spider) Download(ctx context.Context, task DownloadTask) error {
 			os.MkdirAll(dirPath, 0755)
 		}
 
-		if node.URL != "" {
+		if node.URL != "" || node.Slug != "" {
 			// 文档节点
 			var parentPath string
 			if node.ParentUUID != "" {
 				parentPath = tocTree[node.ParentUUID]
 			}
 
+			docRef := strings.TrimSpace(node.Slug)
+			if docRef == "" {
+				docRef = node.URL
+			}
+
 			// 保存文档
-			if err := s.downloader.SaveDocument(yuqueData.Book.ID, node.URL, node.Title, parentPath); err != nil {
+			if err := s.downloader.SaveDocument(yuqueData.Book.ID, docRef, node.URL, task.URL, node.Title, parentPath); err != nil {
 				fmt.Printf("下载文档失败 %s: %v\n", node.Title, err)
 				continue
 			}

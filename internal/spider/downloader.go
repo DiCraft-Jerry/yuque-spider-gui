@@ -26,9 +26,9 @@ func NewDownloader(cookie string, outputPath string, config Config) *Downloader 
 }
 
 // SaveDocument 保存文档
-func (d *Downloader) SaveDocument(bookID int, slug, title, parentPath string) error {
+func (d *Downloader) SaveDocument(bookID int, slug, docURL, bookURL, title, parentPath string) error {
 	// 获取文档内容
-	docData, err := d.fetcher.FetchDocument(bookID, slug)
+	docData, err := d.fetcher.FetchDocument(bookID, slug, docURL, bookURL)
 	if err != nil {
 		return fmt.Errorf("获取文档失败: %w", err)
 	}
