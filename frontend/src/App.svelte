@@ -30,15 +30,16 @@
   let tasks = [];
 
   let newTask = {
-    url: '',
     cookie: '',
     outputPath: ''
   };
+  let taskURLs = [''];
 
   let defaultOutputPath = '';
+  let addURLCount = 1;
+  let linkBatchInput = '';
+  let showLinkImportModal = false;
 
-  let batchInput = '';
-  let showBatchModal = false;
   let showHelpTip = false;
   let theme = 'light';
 
@@ -70,6 +71,59 @@
   let errorMessage = '';
   let successMessage = '';
   let hintTimer;
+
+  function getNormalizedTaskURLs() {
+    return taskURLs.map((url) => url.trim()).filter(Boolean);
+  }
+
+  function addURLInput() {
+    const rawCount = Number(addURLCount);
+    if (!Number.isFinite(rawCount) || rawCount < 1) {
+      showError('请填写新增链接条数，且最小为 1');
+      return;
+    }
+    const count = Math.floor(rawCount);
+    taskURLs = [...taskURLs, ...Array(count).fill('')];
+  }
+
+  function importURLLines() {
+    const lines = linkBatchInput
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (lines.length === 0) {
+      showError('请先粘贴要导入的链接');
+      return;
+    }
+
+    const hasOnlyEmptyFirstRow =
+      taskURLs.length === 1 && typeof taskURLs[0] === 'string' && taskURLs[0].trim() === '';
+
+    if (hasOnlyEmptyFirstRow) {
+      taskURLs = lines;
+    } else {
+      taskURLs = [...taskURLs, ...lines];
+    }
+
+    linkBatchInput = '';
+    showLinkImportModal = false;
+    showSuccess(`已导入 ${lines.length} 条链接`);
+  }
+
+  function removeURLInput(index) {
+    // 第一行固定保留，避免首行位置抖动
+    if (index === 0) {
+      taskURLs = taskURLs.map((item, i) => (i === 0 ? '' : item));
+      return;
+    }
+
+    if (taskURLs.length <= 1) {
+      taskURLs = [''];
+      return;
+    }
+    taskURLs = taskURLs.filter((_, i) => i !== index);
+  }
 
   function clearHintTimer() {
     if (hintTimer) {
@@ -163,10 +217,9 @@
     clearHintTimer();
     errorMessage = '';
     successMessage = '';
-
-    const isValid = await ValidateURL(newTask.url);
-    if (!isValid) {
-      showError('请输入有效的语雀 URL');
+    const urls = getNormalizedTaskURLs();
+    if (urls.length === 0) {
+      showError('请输入至少一个语雀 URL');
       return;
     }
 
@@ -177,12 +230,28 @@
     }
 
     try {
-      await AddTask(newTask.url, newTask.cookie, targetOutputPath, config);
-      showSuccess('任务添加成功');
+      let successCount = 0;
+      for (const url of urls) {
+        const isValid = await ValidateURL(url);
+        if (!isValid) continue;
+        await AddTask(url, newTask.cookie, targetOutputPath, config);
+        successCount++;
+      }
+
+      if (successCount === 0) {
+        showError('没有可添加的有效语雀 URL');
+        return;
+      }
+
+      if (urls.length === 1) {
+        showSuccess('任务添加成功');
+      } else {
+        showSuccess(`成功添加 ${successCount}/${urls.length} 个任务`);
+      }
 
       defaultOutputPath = targetOutputPath;
       newTask.outputPath = targetOutputPath;
-      newTask.url = '';
+      taskURLs = [''];
       newTask.cookie = '';
     } catch (err) {
       showError('添加任务失败: ' + err);
@@ -229,63 +298,6 @@
     } catch (err) {
       showError('清除任务失败: ' + err);
     }
-  }
-
-  function parseBatchInput() {
-    const lines = batchInput.trim().split('\n');
-    const result = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      const parts = trimmed.split(',');
-      const url = parts[0].trim();
-      const cookie = parts.length > 1 ? parts[1].trim() : '';
-
-      if (url) {
-        result.push({ url, cookie });
-      }
-    }
-
-    return result;
-  }
-
-  async function importBatch() {
-    clearHintTimer();
-    errorMessage = '';
-    successMessage = '';
-
-    const targetOutputPath = newTask.outputPath || defaultOutputPath;
-    if (!targetOutputPath) {
-      showError('请先选择输出目录');
-      return;
-    }
-
-    const batchTasks = parseBatchInput();
-
-    if (batchTasks.length === 0) {
-      showError('没有有效的任务');
-      return;
-    }
-
-    let successCount = 0;
-    for (const task of batchTasks) {
-      try {
-        await AddTask(task.url, task.cookie, targetOutputPath, config);
-        successCount++;
-      } catch (err) {
-        console.error('添加任务失败:', err);
-      }
-    }
-
-    defaultOutputPath = targetOutputPath;
-    newTask.outputPath = targetOutputPath;
-
-    showSuccess(`成功添加 ${successCount}/${batchTasks.length} 个任务`);
-
-    showBatchModal = false;
-    batchInput = '';
   }
 
   function getStatusBadgeClass(status) {
@@ -534,12 +546,55 @@
           </div>
         </div>
         <div class="form-grid form-grid-new-task">
-          <label class="form-label">知识库 URL</label>
-          <input
-            type="text"
-            bind:value={newTask.url}
-            placeholder="https://www.yuque.com/user/book"
-          />
+          <label class="form-label form-label-top">知识库 URL</label>
+          <div class="url-input-list">
+            {#each taskURLs as _, index}
+              <div class="url-input-row">
+                <input
+                  type="text"
+                  bind:value={taskURLs[index]}
+                  placeholder="https://www.yuque.com/user/book"
+                />
+                {#if index > 0}
+                  <button
+                    type="button"
+                    class="btn btn-outline btn-url-remove"
+                    on:click={() => removeURLInput(index)}
+                    title="删除此条"
+                    aria-label="删除此条 URL"
+                  >
+                    删除
+                  </button>
+                {/if}
+              </div>
+            {/each}
+            <div class="url-add-controls">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                max="50"
+                required
+                bind:value={addURLCount}
+                class="url-add-count-input"
+                aria-label="新增链接条数"
+              />
+              <button
+                type="button"
+                class="btn btn-outline btn-url-plus"
+                on:click={addURLInput}
+              >
+                添加链接
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline btn-url-import"
+                on:click={() => (showLinkImportModal = true)}
+              >
+                按行导入
+              </button>
+            </div>
+          </div>
 
           <label class="form-label">Cookie (可选)</label>
           <input
@@ -567,7 +622,6 @@
           <h2 class="card-title">任务列表</h2>
           <div class="card-actions">
             <div class="card-subtitle">共 {stats.total} 个任务</div>
-            <button on:click={() => showBatchModal = true} class="btn btn-outline">批量导入</button>
             <button on:click={startAllPending} disabled={stats.pending === 0} class="btn btn-primary">开始全部</button>
             <button on:click={clearCompleted} disabled={stats.completed === 0 && stats.failed === 0} class="btn btn-secondary">清除完成</button>
           </div>
@@ -577,7 +631,7 @@
           <div class="empty-state">
             <div class="empty-icon">📭</div>
             <p>暂无下载任务</p>
-            <p class="empty-hint">添加新任务或批量导入开始下载</p>
+            <p class="empty-hint">添加新任务开始下载</p>
           </div>
         {:else}
           {#each tasks as task (task.id)}
@@ -640,34 +694,25 @@
     </section>
   </div>
 
-  {#if showBatchModal}
-    <div class="modal-overlay" on:click={() => showBatchModal = false}>
-      <div class="modal-content" on:click|stopPropagation>
-        <div class="modal-header">
-          <h3>批量导入任务</h3>
-          <button class="modal-close" on:click={() => showBatchModal = false}>×</button>
-        </div>
-        <div class="modal-body">
-          <p class="modal-hint">
-            每行一个任务，格式: URL,Cookie (Cookie 可选)<br />
-            例如:<br />
-            https://www.yuque.com/user/book1<br />
-            https://www.yuque.com/user/book2,yuque_session=xxx
-          </p>
-          <textarea
-            bind:value={batchInput}
-            placeholder="粘贴任务列表..."
-            rows="10"
-            class="batch-textarea"
-          ></textarea>
-        </div>
-        <div class="modal-footer">
-          <button on:click={() => showBatchModal = false} class="btn btn-secondary">取消</button>
-          <button on:click={importBatch} class="btn btn-primary">导入</button>
+  {#if showLinkImportModal}
+    <div class="link-import-overlay" on:click={() => (showLinkImportModal = false)}>
+      <div class="link-import-modal" on:click|stopPropagation>
+        <div class="link-import-title">批量导入链接（每行一个 URL）</div>
+        <textarea
+          bind:value={linkBatchInput}
+          class="url-batch-textarea"
+          rows="8"
+          placeholder="https://www.yuque.com/team/book-a
+https://www.yuque.com/team/book-b"
+        ></textarea>
+        <div class="link-import-actions">
+          <button type="button" class="btn btn-secondary" on:click={() => (showLinkImportModal = false)}>取消</button>
+          <button type="button" class="btn btn-primary" on:click={importURLLines}>导入</button>
         </div>
       </div>
     </div>
   {/if}
+
 </main>
 
 <style>
@@ -1185,12 +1230,136 @@
     font-weight: 500;
   }
 
+  .form-label-top {
+    align-self: start;
+    padding-top: 10px;
+  }
+
   .form-grid input[type="text"] {
     padding: 10px 14px;
     border-radius: 8px;
     border: 1px solid var(--line);
     font-size: 0.9rem;
     box-sizing: border-box;
+  }
+
+  .url-input-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .url-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .url-input-row input[type="text"] {
+    flex: 1;
+    height: 40px;
+  }
+
+  .btn-url-remove {
+    min-width: 56px;
+    height: 40px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-color: var(--line);
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1;
+  }
+
+  .btn-url-remove:hover:not(:disabled) {
+    color: #dc2626;
+    border-color: #fca5a5;
+    background: rgba(248, 113, 113, 0.08);
+  }
+
+  .btn-url-plus {
+    padding: 8px 14px;
+    font-size: 0.82rem;
+  }
+
+  .url-add-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .url-batch-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    resize: vertical;
+    box-sizing: border-box;
+    font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+
+  .url-batch-textarea:focus {
+    outline: 2px solid #6366f1;
+    border-color: transparent;
+  }
+
+  .btn-url-import {
+    padding: 8px 14px;
+    font-size: 0.82rem;
+  }
+
+  .link-import-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.35);
+    z-index: 1100;
+  }
+
+  .link-import-modal {
+    position: absolute;
+    top: 33vh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(720px, calc(100vw - 40px));
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.28);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .link-import-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-main);
+  }
+
+  .link-import-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .url-add-count-input {
+    width: 74px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    font-size: 0.82rem;
+    box-sizing: border-box;
+  }
+
+  .url-add-count-input:focus {
+    outline: 2px solid #6366f1;
+    border-color: transparent;
   }
 
   .form-grid input[type="text"]:focus {
@@ -1204,7 +1373,24 @@
     color: var(--text-main);
   }
 
+  :global(.theme-dark) .url-add-count-input {
+    background: rgba(2, 6, 23, 0.55);
+    border-color: var(--line);
+    color: var(--text-main);
+  }
+
+  :global(.theme-dark) .url-batch-textarea {
+    background: rgba(2, 6, 23, 0.55);
+    border-color: var(--line);
+    color: var(--text-main);
+  }
+
   :global(.theme-dark) .form-grid input[type="text"]::placeholder {
+    color: var(--text-sub);
+    opacity: 0.9;
+  }
+
+  :global(.theme-dark) .url-batch-textarea::placeholder {
     color: var(--text-sub);
     opacity: 0.9;
   }
@@ -1213,6 +1399,17 @@
     background: rgba(15, 23, 42, 0.75);
     border-color: rgba(99, 102, 241, 0.35);
   }
+
+  :global(.theme-dark) .url-add-count-input:focus {
+    background: rgba(15, 23, 42, 0.75);
+    border-color: rgba(99, 102, 241, 0.35);
+  }
+
+  :global(.theme-dark) .url-batch-textarea:focus {
+    background: rgba(15, 23, 42, 0.75);
+    border-color: rgba(99, 102, 241, 0.35);
+  }
+
 
   .path-row {
     display: flex;
@@ -1556,88 +1753,4 @@
     gap: 16px;
   }
 
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(17, 24, 39, 0.45);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 24px;
-  }
-
-  .modal-content {
-    background: #ffffff;
-    border-radius: 16px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .modal-header,
-  .modal-footer {
-    padding: 20px 24px;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .modal-footer {
-    border-bottom: none;
-    border-top: 1px solid #e5e7eb;
-    justify-content: flex-end;
-    gap: 12px;
-  }
-
-  .modal-header h3 {
-    margin: 0;
-    font-size: 1.1rem;
-  }
-
-  .modal-close {
-    background: none;
-    border: none;
-    font-size: 1.8rem;
-    color: #6b7280;
-    cursor: pointer;
-    line-height: 1;
-  }
-
-  .modal-close:hover {
-    color: #111827;
-  }
-
-  .modal-body {
-    padding: 20px 24px;
-    overflow-y: auto;
-    flex: 1;
-  }
-
-  .modal-hint {
-    font-size: 0.85rem;
-    color: #6b7280;
-    line-height: 1.6;
-    margin-bottom: 16px;
-  }
-
-  .batch-textarea {
-    width: 100%;
-    padding: 12px;
-    border-radius: 8px;
-    border: 1px solid #d1d5db;
-    font-family: 'JetBrains Mono', 'Consolas', monospace;
-    font-size: 0.85rem;
-    resize: vertical;
-    box-sizing: border-box;
-  }
-
-  .batch-textarea:focus {
-    outline: 2px solid #6366f1;
-    border-color: transparent;
-  }
 </style>
