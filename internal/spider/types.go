@@ -20,6 +20,8 @@ type Config struct {
 	DownloadMode string `json:"downloadMode"`
 	// FailOnImageError 图片下载失败时是否使文档失败
 	FailOnImageError bool `json:"failOnImageError"`
+	// SkipMarkdownImages 为 true 时：保存 .md 时不下载文中图片、不替换为本地路径
+	SkipMarkdownImages bool `json:"skipMarkdownImages"`
 }
 
 // DefaultConfig 默认配置

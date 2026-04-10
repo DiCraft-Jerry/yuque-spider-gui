@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import appIcon from './assets/appicon.png';
+  import ConfigDropdown from './components/ConfigDropdown.svelte';
   import {
     AddTask,
     RemoveTask,
@@ -41,6 +42,11 @@
   let showHelpTip = false;
   let theme = 'light';
 
+  const downloadModeSelectOptions = [
+    { value: 'md', label: 'md' },
+    { value: 'lake', label: 'lake' }
+  ];
+
   let config = {
     delayMin: 1,
     delayMax: 4,
@@ -49,7 +55,8 @@
     maxRetries: 3,
     concurrentDownloads: 1,
     downloadMode: 'lake',
-    failOnImageError: false
+    failOnImageError: false,
+    skipMarkdownImages: false
   };
 
   $: stats = {
@@ -424,10 +431,14 @@
       <section class="sidebar-block">
         <h3>输出目录</h3>
         <div class="output-selector">
-          <div class="output-path" title={defaultOutputPath || '未选择目录'}>
+          <div
+            class="path-display"
+            class:is-placeholder={!defaultOutputPath}
+            title={defaultOutputPath || '未选择目录'}
+          >
             {defaultOutputPath || '未选择'}
           </div>
-          <button class="btn btn-secondary" on:click={selectOutputDir}>选择目录</button>
+          <button type="button" class="btn btn-outline" on:click={selectOutputDir}>选择目录</button>
         </div>
         <p class="sidebar-hint">每个知识库会在该目录下创建一个同名文件夹。</p>
       </section>
@@ -453,27 +464,76 @@
           </div>
           <div class="config-item">
             <label>文档类型</label>
-            <select bind:value={config.downloadMode}>
-              <option value="md">md</option>
-              <option value="lake">lake</option>
-            </select>
+            <ConfigDropdown bind:value={config.downloadMode} options={downloadModeSelectOptions} />
           </div>
-          <div class="config-item">
-            <label>图片失败策略</label>
-            <select bind:value={config.failOnImageError}>
-              <option value={false}>继续下载文档</option>
-              <option value={true}>文档下载失败</option>
-            </select>
-          </div>
+          {#if config.downloadMode === 'md'}
+            <div class="config-item config-item-segmented">
+              <label>文中图片</label>
+              <div class="segmented" role="group" aria-label="Markdown 文中图片">
+                <button
+                  type="button"
+                  class="segmented-btn"
+                  class:segmented-btn-active={!config.skipMarkdownImages}
+                  on:click={() => (config = { ...config, skipMarkdownImages: false })}
+                >
+                  下载到本地
+                </button>
+                <button
+                  type="button"
+                  class="segmented-btn"
+                  class:segmented-btn-active={config.skipMarkdownImages}
+                  on:click={() => (config = { ...config, skipMarkdownImages: true })}
+                >
+                  仅保留链接
+                </button>
+              </div>
+              <p class="config-micro-hint">
+                {config.skipMarkdownImages
+                  ? '不创建 assets 目录，图片仍为语雀/远程地址'
+                  : '图片保存到文档旁 assets，并替换为相对路径'}
+              </p>
+            </div>
+            <div class="config-item config-item-segmented">
+              <label>图片下载失败策略</label>
+              <div class="segmented" role="group" aria-label="图片下载失败时的处理">
+                <button
+                  type="button"
+                  class="segmented-btn"
+                  class:segmented-btn-active={!config.failOnImageError}
+                  on:click={() => (config = { ...config, failOnImageError: false })}
+                >
+                  继续下载文档
+                </button>
+                <button
+                  type="button"
+                  class="segmented-btn"
+                  class:segmented-btn-active={config.failOnImageError}
+                  on:click={() => (config = { ...config, failOnImageError: true })}
+                >
+                  文档下载失败
+                </button>
+              </div>
+              <p class="config-micro-hint">
+                {config.failOnImageError
+                  ? '任一张图片拉取失败则整篇文档记为失败'
+                  : '图片失败时保留原链接，文档仍会保存'}
+              </p>
+            </div>
+          {/if}
         </div>
       </section>
 
     </aside>
 
     <section class="app-content">
-      <div class="card">
-        <h2 class="card-title">新建任务</h2>
-        <div class="form-grid">
+      <div class="card card-new-task">
+        <div class="card-header card-header-new-task">
+          <h2 class="card-title">新建任务</h2>
+          <div class="card-actions">
+            <button type="button" class="btn btn-primary btn-add-task" on:click={addTask}>添加</button>
+          </div>
+        </div>
+        <div class="form-grid form-grid-new-task">
           <label class="form-label">知识库 URL</label>
           <input
             type="text"
@@ -490,14 +550,14 @@
 
           <label class="form-label">保存路径</label>
           <div class="path-row">
-            <input
-              type="text"
-              bind:value={newTask.outputPath}
-              placeholder="未选择"
-              readonly
-            />
-            <button class="btn btn-secondary" on:click={selectOutputDir}>选择目录</button>
-            <button class="btn btn-primary" on:click={addTask}>➕ 添加</button>
+            <div
+              class="path-display path-display-main"
+              class:is-placeholder={!(newTask.outputPath || defaultOutputPath)}
+              title={newTask.outputPath || defaultOutputPath || ''}
+            >
+              {newTask.outputPath || defaultOutputPath || '未选择'}
+            </div>
+            <button type="button" class="btn btn-outline" on:click={selectOutputDir}>选择目录</button>
           </div>
         </div>
       </div>
@@ -901,13 +961,47 @@
     gap: 12px;
   }
 
-  .output-path {
-    background: var(--sidebar-input-bg);
-    border: 1px solid var(--sidebar-input-border);
-    border-radius: 8px;
+  /* 只读目录展示：非输入框样式 */
+  .path-display {
+    margin: 0;
     padding: 10px 12px;
+    border-radius: 8px;
     font-size: 0.85rem;
+    line-height: 1.45;
     word-break: break-all;
+    box-sizing: border-box;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px dashed var(--sidebar-input-border);
+    color: var(--sidebar-text-main);
+  }
+
+  :global(.theme-dark) .path-display {
+    background: rgba(99, 102, 241, 0.1);
+  }
+
+  .path-display.is-placeholder {
+    color: var(--sidebar-text-sub);
+    font-style: normal;
+  }
+
+  .path-display-main {
+    flex: 1;
+    min-width: 0;
+    background: rgba(99, 102, 241, 0.05);
+    border-color: var(--line);
+    border-style: dashed;
+    color: var(--text-main);
+  }
+
+  :global(.theme-dark) .path-display-main {
+    background: rgba(99, 102, 241, 0.08);
+  }
+
+  .path-display-main.is-placeholder {
+    color: var(--text-sub);
   }
 
   .sidebar-hint {
@@ -935,8 +1029,7 @@
     gap: 8px;
   }
 
-  .config-item input,
-  .config-item select {
+  .config-item input {
     width: 100%;
     padding: 8px 10px;
     border-radius: 8px;
@@ -947,29 +1040,70 @@
     box-sizing: border-box;
   }
 
-  .config-item input:focus,
-  .config-item select:focus {
+  .config-item input:focus {
     outline: none;
     border-color: #6366f1;
     box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.28);
   }
 
-  .config-item select {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    padding-right: 34px;
-    background-image: linear-gradient(45deg, transparent 50%, var(--sidebar-text-sub) 50%),
-      linear-gradient(135deg, var(--sidebar-text-sub) 50%, transparent 50%);
-    background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
-    background-size: 6px 6px, 6px 6px;
-    background-repeat: no-repeat;
-    cursor: pointer;
+  .config-item-segmented .segmented {
+    display: flex;
+    width: 100%;
+    padding: 4px;
+    gap: 4px;
+    border-radius: 10px;
+    box-sizing: border-box;
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid var(--sidebar-input-border);
   }
 
-  .config-item select option {
-    background: var(--bg-panel);
-    color: var(--text-main);
+  :global(.theme-dark) .config-item-segmented .segmented {
+    background: rgba(99, 102, 241, 0.12);
+  }
+
+  .segmented-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 8px;
+    border: none;
+    border-radius: 7px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    background: transparent;
+    color: var(--sidebar-text-sub);
+    transition:
+      background 0.16s ease,
+      color 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+
+  .segmented-btn:hover:not(.segmented-btn-active) {
+    color: var(--sidebar-text-main);
+    background: rgba(255, 255, 255, 0.45);
+  }
+
+  :global(.theme-dark) .segmented-btn:hover:not(.segmented-btn-active) {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .segmented-btn-active {
+    color: var(--sidebar-text-main);
+    background: var(--bg-sidebar-card);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  }
+
+  :global(.theme-dark) .segmented-btn-active {
+    background: rgba(30, 41, 59, 0.95);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  }
+
+  .config-micro-hint {
+    margin: 8px 0 0;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--sidebar-text-sub);
   }
 
   .helper-list {
@@ -997,6 +1131,14 @@
     padding: 24px;
   }
 
+  .card-new-task {
+    padding-top: 16px;
+  }
+
+  .form-grid-new-task {
+    margin-top: 22px;
+  }
+
   .card-header {
     display: flex;
     justify-content: space-between;
@@ -1004,6 +1146,13 @@
     margin-bottom: 16px;
     gap: 12px;
     flex-wrap: wrap;
+  }
+
+  .card-header.card-header-new-task {
+    margin-bottom: 0;
+    margin-top: -4px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
   }
 
   .card-actions {
@@ -1055,8 +1204,9 @@
     align-items: center;
   }
 
-  .path-row input {
+  .path-row .path-display-main {
     flex: 1;
+    min-width: 0;
   }
 
   .btn {
@@ -1085,6 +1235,26 @@
 
   .btn-primary:hover:not(:disabled) {
     background: #4338ca;
+  }
+
+  /* 与侧栏、卡片主按钮统一的扁平主色，无渐变与重阴影 */
+  .btn-add-task {
+    background: #4f46e5;
+    color: #ffffff;
+    box-shadow: none;
+  }
+
+  .btn-add-task:hover:not(:disabled) {
+    background: #4338ca;
+    box-shadow: none;
+  }
+
+  :global(.theme-dark) .btn-add-task {
+    background: #6366f1;
+  }
+
+  :global(.theme-dark) .btn-add-task:hover:not(:disabled) {
+    background: #818cf8;
   }
 
   .btn-secondary {

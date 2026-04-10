@@ -17,7 +17,8 @@ const defaultConfigFallback = () => ({
   maxRetries: 3,
   concurrentDownloads: 1,
   downloadMode: 'lake',
-  failOnImageError: false
+  failOnImageError: false,
+  skipMarkdownImages: false
 })
 
 export async function GetDefaultConfig() {

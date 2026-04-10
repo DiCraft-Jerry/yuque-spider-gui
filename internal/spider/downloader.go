@@ -56,12 +56,15 @@ func (d *Downloader) SaveDocument(bookID int, slug, docURL, bookURL, title, pare
 		return nil
 	}
 
-	// markdown 才执行图片重写
-	markdown, processErr := d.processImages(docData.SourceCode, filepath.Dir(filePath))
-	if processErr != nil {
-		return processErr
+	content := docData.SourceCode
+	if !d.config.SkipMarkdownImages {
+		var processErr error
+		content, processErr = d.processImages(docData.SourceCode, filepath.Dir(filePath))
+		if processErr != nil {
+			return processErr
+		}
 	}
-	if err := os.WriteFile(filePath, []byte(markdown), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("写入文件失败: %w", err)
 	}
 
