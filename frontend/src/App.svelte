@@ -1198,6 +1198,22 @@
     border-color: transparent;
   }
 
+  :global(.theme-dark) .form-grid input[type="text"] {
+    background: rgba(2, 6, 23, 0.55);
+    border-color: var(--line);
+    color: var(--text-main);
+  }
+
+  :global(.theme-dark) .form-grid input[type="text"]::placeholder {
+    color: var(--text-sub);
+    opacity: 0.9;
+  }
+
+  :global(.theme-dark) .form-grid input[type="text"]:focus {
+    background: rgba(15, 23, 42, 0.75);
+    border-color: rgba(99, 102, 241, 0.35);
+  }
+
   .path-row {
     display: flex;
     gap: 12px;
