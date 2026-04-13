@@ -17,6 +17,16 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+type bookDocsResponse struct {
+	Data []bookDocMeta `json:"data"`
+}
+
+type bookDocMeta struct {
+	Slug   string `json:"slug"`
+	Type   string `json:"type"`
+	Format string `json:"format"`
+}
+
 // Fetcher 网络请求处理器
 type Fetcher struct {
 	client *http.Client
@@ -114,8 +124,52 @@ func (f *Fetcher) FetchBookData(rawURL string) (*YuqueData, error) {
 	return &yuqueData, nil
 }
 
+// FetchBookDocsMeta 获取知识库文档元信息（真实类型/格式）
+func (f *Fetcher) FetchBookDocsMeta(bookID int) (map[string]bookDocMeta, error) {
+	if bookID <= 0 {
+		return nil, fmt.Errorf("book_id 无效: %d", bookID)
+	}
+
+	apiURL := fmt.Sprintf("https://www.yuque.com/api/docs?book_id=%d", bookID)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	f.applyCommonHeaders(req)
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("获取文档元信息失败,状态码: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var payload bookDocsResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+
+	metaMap := make(map[string]bookDocMeta, len(payload.Data))
+	for _, item := range payload.Data {
+		slug := strings.TrimSpace(item.Slug)
+		if slug == "" {
+			continue
+		}
+		metaMap[slug] = item
+	}
+	return metaMap, nil
+}
+
 // FetchDocument 获取文档内容
-func (f *Fetcher) FetchDocument(_ int, slug, docURL, bookURL string) (*DocData, error) {
+func (f *Fetcher) FetchDocument(_ int, slug, docURL, bookURL, docType string) (*DocData, error) {
 	docSlug := normalizeDocSlug(slug)
 	mode := strings.ToLower(strings.TrimSpace(f.config.DownloadMode))
 	if mode == "" {
@@ -130,7 +184,7 @@ func (f *Fetcher) FetchDocument(_ int, slug, docURL, bookURL string) (*DocData, 
 		return nil, fmt.Errorf("文档下载失败: %w", mdErr)
 	}
 
-	lakeDoc, lakeErr := f.fetchDocumentFromLake(docURL, docSlug, bookURL)
+	lakeDoc, lakeErr := f.fetchDocumentFromLake(docURL, docSlug, bookURL, docType)
 	if lakeErr == nil {
 		return lakeDoc, nil
 	}
@@ -295,52 +349,95 @@ func (f *Fetcher) fetchDocumentFromPage(docURL, docSlug, bookURL string) (*DocDa
 	}, nil
 }
 
-func (f *Fetcher) fetchDocumentFromLake(docURL, docSlug, bookURL string) (*DocData, error) {
+func (f *Fetcher) fetchDocumentFromLake(docURL, docSlug, bookURL, docType string) (*DocData, error) {
 	lakeURL := buildLakeURL(docURL, docSlug, bookURL)
-	if lakeURL == "" {
+	lakeSheetURL := buildLakeSheetURL(docURL, docSlug, bookURL)
+	if lakeURL == "" && lakeSheetURL == "" {
 		return nil, fmt.Errorf("lake 下载地址为空")
 	}
-	fmt.Printf("文档下载链接(%s): %s\n", docSlug, lakeURL)
 
-	req, err := http.NewRequest("GET", lakeURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	f.applyCommonHeaders(req)
-	req.Header.Set("Accept", "text/markdown,text/plain,*/*")
-
-	resp, err := f.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("lake 下载失败,状态码: %d, 链接: %s", resp.StatusCode, lakeURL)
+	typeHint := strings.ToLower(strings.TrimSpace(docType))
+	strictByType := false
+	downloadURLs := make([]string, 0, 2)
+	preferSheet := isLikelySheetDoc(docType, docURL)
+	if strings.Contains(typeHint, "lakesheet") || strings.Contains(typeHint, "sheet") {
+		preferSheet = true
+		strictByType = true
+	} else if strings.Contains(typeHint, "lake") || strings.Contains(typeHint, "doc") {
+		preferSheet = false
+		strictByType = true
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	if preferSheet {
+		if lakeSheetURL != "" {
+			downloadURLs = append(downloadURLs, lakeSheetURL)
+		}
+		if !strictByType && lakeURL != "" && lakeURL != lakeSheetURL {
+			downloadURLs = append(downloadURLs, lakeURL)
+		}
+	} else {
+		if lakeURL != "" {
+			downloadURLs = append(downloadURLs, lakeURL)
+		}
+		if !strictByType && lakeSheetURL != "" && lakeSheetURL != lakeURL {
+			downloadURLs = append(downloadURLs, lakeSheetURL)
+		}
 	}
 
-	content := string(body)
-	trimmed := strings.TrimSpace(content)
-	if trimmed == "" || strings.HasPrefix(strings.ToLower(trimmed), "<!doctype html") || strings.HasPrefix(strings.ToLower(trimmed), "<html") {
-		return nil, fmt.Errorf("lake 响应不是文档内容, 链接: %s", lakeURL)
+	var lastErr error
+	for _, downloadURL := range downloadURLs {
+		fmt.Printf("文档下载链接(%s): %s\n", docSlug, downloadURL)
+
+		req, err := http.NewRequest("GET", downloadURL, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		f.applyCommonHeaders(req)
+		req.Header.Set("Accept", "text/markdown,text/plain,*/*")
+
+		resp, err := f.client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("lake 下载失败,状态码: %d, 链接: %s", resp.StatusCode, downloadURL)
+			continue
+		}
+
+		content := string(body)
+		trimmed := strings.TrimSpace(content)
+		if trimmed == "" || strings.HasPrefix(strings.ToLower(trimmed), "<!doctype html") || strings.HasPrefix(strings.ToLower(trimmed), "<html") {
+			lastErr = fmt.Errorf("lake 响应不是文档内容, 链接: %s", downloadURL)
+			continue
+		}
+
+		fileExt := detectLakeFileExt(resp.Header.Get("Content-Disposition"), resp.Header.Get("Content-Type"))
+		if fileExt == "" {
+			fileExt = ".md"
+		}
+
+		return &DocData{
+			Title:      docSlug,
+			SourceCode: content,
+			FileExt:    fileExt,
+			RawContent: body,
+		}, nil
 	}
 
-	fileExt := detectLakeFileExt(resp.Header.Get("Content-Disposition"), resp.Header.Get("Content-Type"))
-	if fileExt == "" {
-		fileExt = ".md"
+	if lastErr != nil {
+		return nil, lastErr
 	}
-
-	return &DocData{
-		Title:      docSlug,
-		SourceCode: content,
-		FileExt:    fileExt,
-		RawContent: body,
-	}, nil
+	return nil, fmt.Errorf("lake 下载失败")
 }
 
 func (f *Fetcher) fetchDocumentFromMarkdown(docURL, docSlug, bookURL string) (*DocData, error) {
@@ -428,6 +525,26 @@ func buildLakeURL(docURL, docSlug, bookURL string) string {
 	u.RawQuery = ""
 	u.Fragment = ""
 	u.Path = strings.TrimRight(u.Path, "/") + "/lake"
+	q := u.Query()
+	q.Set("attachment", "true")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func buildLakeSheetURL(docURL, docSlug, bookURL string) string {
+	fullURL := buildDocumentURL(docURL, docSlug, bookURL)
+	if fullURL == "" {
+		return ""
+	}
+
+	u, err := url.Parse(fullURL)
+	if err != nil {
+		return ""
+	}
+
+	u.RawQuery = ""
+	u.Fragment = ""
+	u.Path = strings.TrimRight(u.Path, "/") + "/lakesheet"
 	q := u.Query()
 	q.Set("attachment", "true")
 	u.RawQuery = q.Encode()
@@ -570,4 +687,13 @@ func isRetryableImageError(err error) bool {
 		strings.Contains(msg, "temporarily unavailable") ||
 		strings.Contains(msg, "connection reset") ||
 		strings.Contains(msg, "broken pipe")
+}
+
+func isLikelySheetDoc(docType, docURL string) bool {
+	t := strings.ToLower(strings.TrimSpace(docType))
+	if strings.Contains(t, "sheet") || strings.Contains(t, "excel") || strings.Contains(t, "table") {
+		return true
+	}
+	u := strings.ToLower(strings.TrimSpace(docURL))
+	return strings.Contains(u, "/lakesheet")
 }

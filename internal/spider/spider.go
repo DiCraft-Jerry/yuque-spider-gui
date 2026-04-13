@@ -63,6 +63,13 @@ func (s *Spider) Download(ctx context.Context, task DownloadTask) error {
 	}
 	progress.BookTitle = displayTitle
 
+	bookDocsMeta, metaErr := fetcher.FetchBookDocsMeta(yuqueData.Book.ID)
+	if metaErr != nil {
+		fmt.Printf("获取文档元信息失败(book_id=%d): %v\n", yuqueData.Book.ID, metaErr)
+	} else {
+		fmt.Printf("[yuque docs meta] book_id=%d count=%d\n", yuqueData.Book.ID, len(bookDocsMeta))
+	}
+
 	folderName := resolveBookFolderName(displayTitle, bookTitle, yuqueData.Book.ID)
 
 	// 创建输出目录
@@ -77,9 +84,16 @@ func (s *Spider) Download(ctx context.Context, task DownloadTask) error {
 	s.downloader.outputPath = bookDir
 
 	// 构建目录树
-	tocTree := s.buildTOCTree(yuqueData.Book.TOC)
+	parentNodeSet := buildParentNodeSet(yuqueData.Book.TOC)
+	tocTree := s.buildTOCTree(yuqueData.Book.TOC, parentNodeSet)
 	progress.TotalDocs = len(yuqueData.Book.TOC)
 	s.notifyProgress(progress)
+
+	// 打印语雀返回的 TOC 节点真实类型，便于排查文档类型判断
+	fmt.Printf("[yuque book] id=%d name=%q\n", yuqueData.Book.ID, yuqueData.Book.Name)
+	for _, node := range yuqueData.Book.TOC {
+		fmt.Printf("[yuque toc] title=%q uuid=%q slug=%q type=%q url=%q\n", node.Title, node.UUID, node.Slug, node.Type, node.URL)
+	}
 
 	// 生成 SUMMARY.md 内容
 	var summaryBuilder strings.Builder
@@ -102,7 +116,7 @@ func (s *Spider) Download(ctx context.Context, task DownloadTask) error {
 		// 构建路径
 		nodePath := tocTree[node.UUID]
 
-		if node.Type == "TITLE" || node.ChildUUID != "" {
+		if isDirectoryNode(node, parentNodeSet) {
 			// 目录节点
 			if strings.HasSuffix(nodePath, "/") {
 				summaryBuilder.WriteString(fmt.Sprintf("## %s\n", strings.TrimSuffix(nodePath, "/")))
@@ -129,8 +143,19 @@ func (s *Spider) Download(ctx context.Context, task DownloadTask) error {
 				docRef = node.URL
 			}
 
+			resolvedDocType := node.Type
+			if meta, ok := bookDocsMeta[strings.TrimSpace(docRef)]; ok {
+				if strings.TrimSpace(meta.Format) != "" {
+					resolvedDocType = meta.Format
+				} else if strings.TrimSpace(meta.Type) != "" {
+					resolvedDocType = meta.Type
+				}
+				fmt.Printf("[yuque doc match] slug=%q toc_type=%q api_type=%q api_format=%q resolved=%q\n",
+					docRef, node.Type, meta.Type, meta.Format, resolvedDocType)
+			}
+
 			// 保存文档
-			if err := s.downloader.SaveDocument(yuqueData.Book.ID, docRef, node.URL, task.URL, node.Title, parentPath); err != nil {
+			if err := s.downloader.SaveDocument(yuqueData.Book.ID, docRef, node.URL, task.URL, resolvedDocType, node.Title, parentPath); err != nil {
 				fmt.Printf("下载文档失败 %s: %v\n", node.Title, err)
 				continue
 			}
@@ -191,7 +216,7 @@ func resolveBookFolderName(displayTitle, fallbackTitle string, bookID int) strin
 }
 
 // buildTOCTree 构建目录树
-func (s *Spider) buildTOCTree(toc []TOCNode) map[string]string {
+func (s *Spider) buildTOCTree(toc []TOCNode, parentNodeSet map[string]bool) map[string]string {
 	tree := make(map[string]string)
 	nodeMap := make(map[string]*TOCNode)
 
@@ -204,7 +229,7 @@ func (s *Spider) buildTOCTree(toc []TOCNode) map[string]string {
 
 	// 构建路径
 	for _, node := range toc {
-		if node.Type == "TITLE" || node.ChildUUID != "" {
+		if isDirectoryNode(node, parentNodeSet) {
 			path := s.buildNodePath(node.UUID, nodeMap)
 			tree[node.UUID] = path
 		}
@@ -234,6 +259,26 @@ func (s *Spider) buildNodePath(uuid string, nodeMap map[string]*TOCNode) string 
 	}
 
 	return strings.Join(parts, "/") + "/"
+}
+
+func buildParentNodeSet(toc []TOCNode) map[string]bool {
+	parentNodeSet := make(map[string]bool)
+	for _, node := range toc {
+		parentUUID := strings.TrimSpace(node.ParentUUID)
+		if parentUUID != "" {
+			parentNodeSet[parentUUID] = true
+		}
+	}
+	return parentNodeSet
+}
+
+func hasChildUUID(childUUID string) bool {
+	trimmed := strings.TrimSpace(childUUID)
+	return trimmed != "" && trimmed != "0" && trimmed != "[]"
+}
+
+func isDirectoryNode(node TOCNode, parentNodeSet map[string]bool) bool {
+	return node.Type == "TITLE" || parentNodeSet[node.UUID] || hasChildUUID(node.ChildUUID)
 }
 
 // notifyProgress 通知进度
