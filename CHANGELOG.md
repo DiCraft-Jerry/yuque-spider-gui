@@ -23,6 +23,8 @@
 ### Fixed
 
 - 图片下载与 Markdown 处理相关错误处理、重试等持续优化（见 `internal/spider` 提交记录）。
+- `lake` 模式文档类型判定优化：通过 `api/docs?book_id=...` 按 `slug` 匹配真实 `format/type`，避免 TOC `type` 不准确导致的 `lake/lakesheet` 误判。
+- 修复“父节点既是文档又有子文档”场景的目录识别：父文档正常下载，同时保留同名子目录层级。
 
 ## [2.x] 多任务与 GUI
 
