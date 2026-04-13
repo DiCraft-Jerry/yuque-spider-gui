@@ -14,18 +14,8 @@
     SelectDirectory,
     GetDefaultConfig,
     ValidateURL,
-    EventsOn,
-    WAILS_BACKEND_ERR,
-    wailsBackendUserMessage
+    EventsOn
   } from './appApi.js';
-
-  /** @param {unknown} err @param {string} prefix */
-  function formatAppError(err, prefix) {
-    if (err && typeof err === 'object' && 'message' in err && err.message === WAILS_BACKEND_ERR) {
-      return wailsBackendUserMessage();
-    }
-    return prefix + (err != null ? String(err) : '');
-  }
 
   let tasks = [];
 

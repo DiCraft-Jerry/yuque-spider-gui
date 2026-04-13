@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -306,49 +305,6 @@ func normalizeDocSlug(slug string) string {
 	return raw
 }
 
-func (f *Fetcher) fetchDocumentFromPage(docURL, docSlug, bookURL string) (*DocData, error) {
-	fullURL := buildDocumentURL(docURL, docSlug, bookURL)
-	if fullURL == "" {
-		return nil, fmt.Errorf("文档页面地址为空")
-	}
-
-	req, err := http.NewRequest("GET", fullURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	f.applyCommonHeaders(req)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-
-	resp, err := f.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("文档页面请求失败,状态码: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	page := string(body)
-
-	sourceCode := extractJSONStringField(page, "sourcecode")
-	if sourceCode == "" {
-		return nil, fmt.Errorf("页面中未找到 sourcecode")
-	}
-
-	title := extractJSONStringField(page, "title")
-	return &DocData{
-		Title:      title,
-		SourceCode: sourceCode,
-		FileExt:    ".md",
-		RawContent: []byte(sourceCode),
-	}, nil
-}
-
 func (f *Fetcher) fetchDocumentFromLake(docURL, docSlug, bookURL, docType string) (*DocData, error) {
 	lakeURL := buildLakeURL(docURL, docSlug, bookURL)
 	lakeSheetURL := buildLakeSheetURL(docURL, docSlug, bookURL)
@@ -480,21 +436,6 @@ func (f *Fetcher) fetchDocumentFromMarkdown(docURL, docSlug, bookURL string) (*D
 		FileExt:    ".md",
 		RawContent: body,
 	}, nil
-}
-
-func extractJSONStringField(content, field string) string {
-	pattern := fmt.Sprintf(`"%s":"((?:\\.|[^"\\])*)"`, regexp.QuoteMeta(field))
-	re := regexp.MustCompile(pattern)
-	match := re.FindStringSubmatch(content)
-	if len(match) < 2 {
-		return ""
-	}
-
-	decoded, err := strconv.Unquote(`"` + match[1] + `"`)
-	if err != nil {
-		return ""
-	}
-	return decoded
 }
 
 func normalizeDocURL(docURL string) string {
