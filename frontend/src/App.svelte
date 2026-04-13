@@ -633,12 +633,39 @@
                 </div>
                 <div class="task-actions">
                   {#if task.status === 'pending'}
-                    <button on:click={() => startTask(task.id)} class="btn-icon" title="开始">▶️</button>
+                    <button
+                      on:click={() => startTask(task.id)}
+                      class="btn btn-outline btn-task-action btn-task-start"
+                      title="开始"
+                      aria-label="开始任务"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M8.5 6.5v11l8-5.5-8-5.5Z" fill="currentColor" />
+                      </svg>
+                    </button>
                   {:else if task.status === 'running'}
-                    <button on:click={() => cancelTask(task.id)} class="btn-icon" title="取消">⏸️</button>
+                    <button
+                      on:click={() => cancelTask(task.id)}
+                      class="btn btn-outline btn-task-action btn-task-stop"
+                      title="结束"
+                      aria-label="结束任务"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <rect x="7.5" y="7.5" width="9" height="9" rx="1.5" fill="currentColor" />
+                      </svg>
+                    </button>
                   {/if}
                   {#if task.status !== 'running'}
-                    <button on:click={() => removeTask(task.id)} class="btn-icon btn-danger" title="删除">🗑️</button>
+                    <button
+                      on:click={() => removeTask(task.id)}
+                      class="btn btn-outline btn-task-action btn-task-delete"
+                      title="删除"
+                      aria-label="删除任务"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M9 3.5h6M5 6.5h14M9.8 10v7M14.2 10v7M8.5 20.5h7c1.1 0 2-.9 2.1-2l.8-10H5.6l.8 10c.1 1.1 1 2 2.1 2Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
                   {/if}
                 </div>
               </div>
@@ -1600,6 +1627,53 @@ https://www.yuque.com/team/book-b"
   .task-actions {
     display: flex;
     gap: 8px;
+    align-items: center;
+  }
+
+  .btn-task-action {
+    height: 32px;
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-task-action svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .btn-task-start {
+    color: #4f46e5;
+    border-color: #4f46e5;
+    background: transparent;
+  }
+
+  .btn-task-start:hover:not(:disabled) {
+    background: rgba(79, 70, 229, 0.08);
+  }
+
+  .btn-task-stop {
+    color: #b45309;
+    border-color: #f59e0b;
+    background: transparent;
+  }
+
+  .btn-task-stop:hover:not(:disabled) {
+    background: rgba(245, 158, 11, 0.1);
+  }
+
+  .btn-task-delete {
+    color: #b91c1c;
+    border-color: #fca5a5;
+    background: transparent;
+  }
+
+  .btn-task-delete:hover:not(:disabled) {
+    background: rgba(248, 113, 113, 0.1);
   }
 
   .btn-icon {
