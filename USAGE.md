@@ -64,6 +64,20 @@ chmod +x yuque-spider-gui
 
 任务卡片展示：知识库名、当前文档、进度条、完成数/总数、错误信息等。
 
+### 8. 文档类型判定（lake 模式）
+
+1. 先读取知识库 TOC（目录结构）用于构建层级与顺序  
+2. 再调用 `GET /api/docs?book_id=...` 获取文档真实元信息  
+3. 通过 `slug` 匹配后，按 `format/type` 选择下载地址：  
+   - `lakesheet` / `Sheet` -> `.../lakesheet?attachment=true`  
+   - `lake` / `Doc` -> `.../lake?attachment=true`
+
+### 9. 父文档与子文档
+
+- 若某节点既是文档又挂子文档，会同时生成：  
+  - 父文档文件：`A.md`  
+  - 子文档目录：`A/`（子文档在此目录下）
+
 ## 高级设置说明
 
 ### 延迟范围
