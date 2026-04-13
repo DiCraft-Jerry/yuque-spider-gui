@@ -17,6 +17,7 @@
 - 📊 **独立进度** - 每个任务独立的实时进度与状态
 - 🎯 **任务管理** - 添加、删除、开始、取消；支持「开始全部」「清除完成」
 - 📝 **按行导入链接** - 在新建任务中打开弹窗，按行粘贴 URL 批量生成知识库输入行
+- 🧭 **文档类型精准识别** - 通过 `api/docs?book_id=...` 按 `slug` 匹配真实 `format/type`，区分 `lake` 与 `lakesheet`
 - 🖼️ **Markdown 图片** - `md` 模式下可选择是否将文中图片下载到本地并替换为相对路径
 - ⚠️ **图片失败策略** - `md` 模式下可选「继续保存文档」或「整篇标记失败」
 - 🔐 **私有知识库** - 支持 Cookie
@@ -71,6 +72,13 @@ wails build -platform windows/amd64,darwin/arm64,linux/amd64
 | 文档类型 | `md` 或 `lake`；推荐一般场景优先 `lake` 更稳 |
 | 文中图片 | **仅 `md`**：下载到本地并替换链接，或仅保留远程链接 |
 | 图片下载失败策略 | **仅 `md`**：图片失败时仍保存文档，或整篇记为失败 |
+
+### 下载行为说明
+
+- `lake` 模式下会先获取 `book_id` 对应的文档元信息（`/api/docs?book_id=...`），再按 `slug` 匹配每篇文档。  
+- 当匹配到 `format=lakesheet`（或 `type=Sheet`）时，下载地址使用 `.../lakesheet?attachment=true`。  
+- 普通文档（`format=lake` / `type=Doc`）使用 `.../lake?attachment=true`。  
+- 当 TOC 节点既是文档又有子文档时：父文档文件与同名子目录并存（例如 `A.md` 与 `A/`）。
 
 ## 🛠️ 技术栈
 
