@@ -1,30 +1,38 @@
 # 使用指南
 
+发布包内可执行文件 / 应用名为 **yuque-manager-gui**（Release 压缩包文件名形如 `yuque-manager-gui-vX.X.X-<平台>.zip` / `.tar.gz`）。
+
 ## 安装与运行
 
 ### Windows
 
-1. 下载 `yuque-spider-gui-vX.X.X-windows-amd64.zip`
-2. 解压后运行 `yuque-spider-gui.exe`
+1. 下载 `yuque-manager-gui-vX.X.X-windows-amd64.zip`
+2. 解压后运行 `yuque-manager-gui.exe`
 
 ### macOS
 
 1. 按芯片选择包：Intel `darwin-amd64` / Apple Silicon `darwin-arm64`
-2. 解压：`tar -xzf yuque-spider-gui-vX.X.X-darwin-*.tar.gz`
-3. 运行 `yuque-spider-gui.app` 或 `open yuque-spider-gui.app`
-4. 若提示无法验证开发者：`xattr -cr yuque-spider-gui.app`
+2. 解压：`tar -xzf yuque-manager-gui-vX.X.X-darwin-*.tar.gz`
+3. 运行 `yuque-manager-gui.app` 或 `open yuque-manager-gui.app`
+4. 若提示无法验证开发者：`xattr -cr yuque-manager-gui.app`
 
 ### Linux
 
 ```bash
-tar -xzf yuque-spider-gui-vX.X.X-linux-amd64.tar.gz
-chmod +x yuque-spider-gui
-./yuque-spider-gui
+tar -xzf yuque-manager-gui-vX.X.X-linux-amd64.tar.gz
+chmod +x yuque-manager-gui
+./yuque-manager-gui
 ```
 
 ## 基础使用
 
-### 1. 知识库 URL
+### 0. 下载模式与上传模式
+
+- 窗口顶部可切换 **下载** / **上传**。
+- **下载模式**：顶部显示任务数量等统计（总任务、运行中、等待中、已完成），居中排列。
+- **上传模式**：顶部**不显示**上述下载任务统计；上传进度与当前文件在下方「任务列表」卡片中展示。
+
+### 1. 知识库 URL（下载）
 
 打开目标语雀知识库，复制浏览器地址栏完整 URL。  
 示例：`https://terminuscloud.yuque.com/uoaf0k/eyer97`
@@ -77,6 +85,16 @@ chmod +x yuque-spider-gui
 - 若某节点既是文档又挂子文档，会同时生成：  
   - 父文档文件：`A.md`  
   - 子文档目录：`A/`（子文档在此目录下）
+
+### 10. 本地上传（上传模式）
+
+1. 顶部切换到 **上传**。
+2. **选择目录**：本地包含 `.lake` / `.lakesheet` 文件的根目录（目录结构会映射为语雀目录树）。
+3. 填写 **知识库 URL**（与浏览器打开该知识库时一致）、以及 **Book ID**、**Referer**、**Login**（`x-login`）、**CToken**、**Cookie**（与浏览器开发者工具中一致）。
+4. 选项：**创建目录节点**（为纯文件夹创建 TITLE）、**不移动文档**（导入后不执行目录挂载，一般保持默认关闭以便子文档挂到父级下）。
+5. 点击 **开始上传**；在 **任务列表** 中查看进度与日志。
+
+上传依赖当前登录态与 Cookie，若失败请检查 Token / Cookie 是否过期、Book ID 与知识库是否匹配。
 
 ## 高级设置说明
 
