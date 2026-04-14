@@ -1,13 +1,13 @@
-# 语雀知识库下载器 GUI
+# 语雀知识库管理器（yuque-manager-gui）
 
 <div align="center">
 
-![语雀知识库下载器](https://img.shields.io/badge/语雀-知识库下载器-blue)
+![语雀](https://img.shields.io/badge/语雀-知识库管理-blue)
 ![Wails](https://img.shields.io/badge/Wails-v2-green)
 ![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
-一个语雀知识库批量下载工具，支持 `md` / `lake` 两种导出模式，桌面端多任务管理。
+语雀知识库 **下载** 与 **本地上传**（`.lake` / `.lakesheet`）桌面端工具；下载支持 `md` / `lake` 两种导出模式，多任务管理。打包产物文件名为 **yuque-manager-gui**（各平台可执行文件 / `.app`）。
 
 </div>
 
@@ -25,17 +25,17 @@
 - 📄 **双导出模式** - `md`（Markdown 接口）与 `lake`（Lake 导出）
 - 🌓 **主题** - 浅色 / 深色；深色下表单输入框与整体面板一致
 - 🚀 **跨平台** - Windows、macOS、Linux（Wails 构建）
+- 📤 **本地上传** - 切换为「上传」模式：选择本地目录、填写知识库 URL / Book ID、Login、CToken、Cookie；可选创建目录节点、是否移动文档；上传进度与日志在页面展示（上传模式下顶部不展示下载任务统计）
+- 🔄 **双模式界面** - 顶部在「下载 / 上传」间切换；下载页展示任务数量等统计并居中，上传页隐藏该项
 
 ## 🚀 快速开始
 
 ### 下载使用
 
-1. 从 [Releases](https://github.com/DiCraft-Jerry/yuque-spider-gui/releases) 下载对应平台产物
+1. 从 [Releases](https://github.com/DiCraft-Jerry/yuque-spider-gui/releases) 下载对应平台产物（包内可执行文件 / 应用名为 **yuque-manager-gui**）
 2. 解压并运行
-3. 先通过侧栏或「新建任务」里的 **选择目录** 指定保存根目录（路径为只读展示，需用系统目录选择器）
-4. 在「新建任务」中填写一个或多个知识库 URL（支持动态增减输入框，或用“按行导入”批量填充）；私有库填写一次 Cookie
-5. 点击卡片右上角 **添加** 创建任务
-6. 在任务列表点击 ▶️ 或使用 **开始全部** 下载
+3. **下载**：先通过侧栏或「新建任务」里的 **选择目录** 指定保存根目录（路径为只读展示，需用系统目录选择器）；在「新建任务」中填写知识库 URL；私有库填写 Cookie；**添加** 任务后在列表中开始或 **开始全部**
+4. **上传**：顶部切换到「上传」→ 选择本地上传目录，填写知识库 URL、Book ID、Referer、Login、CToken、Cookie 等 → **开始上传**（详见 [USAGE.md](USAGE.md)）
 
 ### 本地开发
 
@@ -58,6 +58,7 @@ cd frontend && npm install && cd ..
 ```bash
 wails dev
 wails build
+# 产物默认输出到 build/bin/yuque-manager-gui（或 yuque-manager-gui.app）
 # 跨平台示例
 wails build -platform windows/amd64,darwin/arm64,linux/amd64
 ```
@@ -89,14 +90,16 @@ wails build -platform windows/amd64,darwin/arm64,linux/amd64
 ## 📁 项目结构（摘要）
 
 ```
-yuque-spider-gui/
-├── internal/spider/       # 爬虫：fetcher、downloader、spider、types
+yuque-spider-gui/          # 仓库目录名（Go module 仍为 yuque-spider-gui）
+├── internal/spider/       # 下载：fetcher、downloader、spider、types
+├── internal/uploader/     # 上传：Lake / Lakesheet 导入与目录节点
 ├── frontend/src/
-│   ├── App.svelte
-│   ├── components/ConfigDropdown.svelte  # 文档类型等自定义下拉
+│   ├── App.svelte         # 下载 / 上传双模式 UI
+│   ├── components/ConfigDropdown.svelte
 │   └── appApi.js
-├── app.go                 # 任务与 Wails 绑定
+├── app.go                 # 任务、上传与 Wails 绑定
 ├── main.go
+├── wails.json             # 应用名 / 输出文件名：yuque-manager-gui
 └── .github/workflows/build.yml
 ```
 
