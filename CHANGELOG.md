@@ -6,6 +6,8 @@
 
 ### Added
 
+- **本地上传**：`.lake` / `.lakesheet` 目录上传至语雀知识库（`internal/uploader`；界面「上传」模式）。
+- **打包名**：可执行文件 / 应用名为 **yuque-manager-gui**（`wails.json`；CI 产物同步）。
 - **md 模式**：配置项「文中图片」——是否将 Markdown 内图片下载到本地并替换为相对路径（`skipMarkdownImages`）。  
 - **md 模式**：「图片下载失败策略」与「文中图片」同为分段切换，仅在文档类型为 `md` 时显示。  
 - 侧栏 **文档类型** 使用自定义下拉（`ConfigDropdown`），避免系统原生下拉在 WebView 中遮挡与样式不一致。  
@@ -15,6 +17,7 @@
 
 ### Changed
 
+- **界面**：下载 / 上传双模式切换；下载模式下顶部任务统计居中；上传模式下隐藏顶部下载任务统计，上传进度在「任务列表」卡片内展示。
 - 应用图标资源更新（`frontend/src/assets/appicon.png`、`build/appicon.png`）。  
 - 多任务管理、事件推送、Wails 绑定等保持与 v2 架构一致；文档与 README 与当前界面、配置项对齐。
 - 新建任务改为多 URL 输入行：首行固定、可按数量新增、支持逐行删除（首行除外）。
