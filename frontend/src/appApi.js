@@ -37,6 +37,16 @@ export async function SelectDirectory() {
   return path || ''
 }
 
+export async function SelectUploadDirectory() {
+  const app = goApp()
+  if (app) return app.SelectUploadDirectory()
+  const path =
+    typeof window !== 'undefined'
+      ? window.prompt('开发模式：请输入上传目录的完整路径', '')
+      : ''
+  return path || ''
+}
+
 export async function GetAllTasks() {
   const app = goApp()
   if (app) return app.GetAllTasks()
@@ -87,6 +97,12 @@ export async function ValidateURL(arg1) {
     arg1.length > 0 &&
     (arg1.includes('yuque.com') || arg1.includes('www.yuque.com'))
   )
+}
+
+export async function RunUpload(arg1) {
+  const app = goApp()
+  if (!app) throw new Error(WAILS_BACKEND_ERR)
+  return app.RunUpload(arg1)
 }
 
 /**

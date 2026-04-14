@@ -12,9 +12,11 @@
     StartAllPendingTasks,
     ClearCompletedTasks,
     SelectDirectory,
+    SelectUploadDirectory,
     GetDefaultConfig,
     ValidateURL,
-    EventsOn
+    EventsOn,
+    RunUpload
   } from './appApi.js';
 
   let tasks = [];
@@ -32,6 +34,26 @@
 
   let showHelpTip = false;
   let theme = 'light';
+  let activeMode = 'download';
+
+  let uploadForm = {
+    rootPath: '',
+    bookURL: '',
+    baseURL: 'https://www.yuque.com',
+    bookID: '',
+    referer: '',
+    login: '',
+    ctoken: '',
+    cookie: '',
+    createCatalogs: true,
+    noMoveDocs: false,
+    limit: 0,
+    sleepMinSeconds: 1,
+    sleepMaxSeconds: 3
+  };
+  let uploadState = 'idle';
+  let uploadProgress = { current: 0, total: 0, kind: '', path: '', status: '' };
+  let uploadLogs = [];
 
   const downloadModeSelectOptions = [
     { value: 'md', label: 'md' },
@@ -160,6 +182,24 @@
         tasks = [...tasks];
         hydrateDefaultOutput(tasks);
       }
+    });
+
+    EventsOn('upload:state', (state) => {
+      uploadState = state?.status || 'idle';
+      if (state?.error) {
+        showError(`上传失败: ${state.error}`);
+      }
+      if (state?.status === 'completed') {
+        showSuccess('上传完成');
+      }
+    });
+
+    EventsOn('upload:progress', (progress) => {
+      uploadProgress = progress || uploadProgress;
+    });
+
+    EventsOn('upload:log', (line) => {
+      uploadLogs = [...uploadLogs.slice(-299), String(line)];
     });
   });
 
@@ -290,6 +330,52 @@
     }
   }
 
+  async function selectUploadRootDir() {
+    try {
+      const dir = await SelectUploadDirectory();
+      if (dir) uploadForm.rootPath = dir;
+    } catch (err) {
+      showError('选择上传目录失败: ' + err);
+    }
+  }
+
+  async function runUploadTask() {
+    if (!uploadForm.rootPath) {
+      showError('请先选择上传目录');
+      return;
+    }
+    if (!uploadForm.bookURL) {
+      showError('请先填写知识库 URL');
+      return;
+    }
+    if (!uploadForm.ctoken || !uploadForm.cookie || !uploadForm.login) {
+      showError('请填写 Login / CToken / Cookie');
+      return;
+    }
+    try {
+      uploadState = 'running';
+      uploadLogs = [];
+      uploadProgress = { current: 0, total: 0, kind: '', path: '', status: '' };
+      await RunUpload({
+        rootPath: uploadForm.rootPath,
+        bookURL: uploadForm.bookURL,
+        baseURL: uploadForm.baseURL,
+        bookID: Number(uploadForm.bookID) || 0,
+        referer: uploadForm.referer || '',
+        login: uploadForm.login,
+        ctoken: uploadForm.ctoken,
+        cookie: uploadForm.cookie,
+        createCatalogs: uploadForm.createCatalogs,
+        noMoveDocs: uploadForm.noMoveDocs,
+        limit: Number(uploadForm.limit) || 0,
+        sleepMinSeconds: Number(uploadForm.sleepMinSeconds) || 0,
+        sleepMaxSeconds: Number(uploadForm.sleepMaxSeconds) || 0
+      });
+    } catch (err) {
+      showError('上传任务启动失败: ' + err);
+    }
+  }
+
   function getStatusBadgeClass(status) {
     const map = {
       pending: 'badge badge-pending',
@@ -348,31 +434,44 @@
 <svelte:window on:click={handleGlobalClick} />
 
 <main class={`admin-app ${theme === 'dark' ? 'theme-dark' : ''}`}>
-  <header class="app-header">
+  <header class="app-header" class:app-header-upload={activeMode === 'upload'}>
     <div class="brand">
       <div class="brand-main">
         <img class="brand-icon" src={appIcon} alt="语雀下载器图标" />
-        <div class="brand-title">语雀下载器</div>
+        <div class="brand-title">语雀管理器</div>
+        <button
+          type="button"
+          class={`mode-slider ${activeMode === 'upload' ? 'is-upload' : ''}`}
+          on:click={() => (activeMode = activeMode === 'download' ? 'upload' : 'download')}
+          aria-label="切换下载或上传模式"
+          title={activeMode === 'download' ? '切换到上传模式' : '切换到下载模式'}
+        >
+          <span class="mode-slider-label mode-slider-label-left">下载</span>
+          <span class="mode-slider-label mode-slider-label-right">上传</span>
+          <span class="mode-slider-thumb" aria-hidden="true"></span>
+        </button>
       </div>
     </div>
-    <div class="header-stats">
-      <div class="metric">
-        <span class="metric-value">{stats.total}</span>
-        <span class="metric-label">总任务</span>
+    {#if activeMode === 'download'}
+      <div class="header-stats">
+        <div class="metric">
+          <span class="metric-value">{stats.total}</span>
+          <span class="metric-label">总任务</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value">{stats.running}</span>
+          <span class="metric-label">运行中</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value">{stats.pending}</span>
+          <span class="metric-label">等待中</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value">{stats.completed}</span>
+          <span class="metric-label">已完成</span>
+        </div>
       </div>
-      <div class="metric">
-        <span class="metric-value">{stats.running}</span>
-        <span class="metric-label">运行中</span>
-      </div>
-      <div class="metric">
-        <span class="metric-value">{stats.pending}</span>
-        <span class="metric-label">等待中</span>
-      </div>
-      <div class="metric">
-        <span class="metric-value">{stats.completed}</span>
-        <span class="metric-label">已完成</span>
-      </div>
-    </div>
+    {/if}
     <div class="header-actions">
       <div class="help-tooltip">
         <button
@@ -387,9 +486,15 @@
           </svg>
         </button>
         <div class={`help-popover ${showHelpTip ? 'is-visible' : ''}`}>
-          <div>1. 先选择输出目录（仅需一次）</div>
-          <div>2. 粘贴知识库 URL 与 Cookie</div>
-          <div>3. 推荐先用 `lake`，md格式在网络波动时，图片会超时</div>
+          {#if activeMode === 'download'}
+            <div>1. 先选择输出目录（仅需一次）</div>
+            <div>2. 填写知识库 URL，私有库填写 Cookie</div>
+            <div>3. 推荐先用 `lake`，md 模式在网络波动时图片易超时</div>
+          {:else}
+            <div>1. 先选择本地上传目录并填写 Book ID</div>
+            <div>2. 填写 Referer / Login / CToken / Cookie</div>
+            <div>3. 建议先小目录试跑，再执行全量上传</div>
+          {/if}
         </div>
       </div>
       <button
@@ -428,6 +533,7 @@
     {/if}
   </div>
 
+  {#if activeMode === 'download'}
   <div class="app-shell">
     <aside class="app-sidebar">
       <section class="sidebar-block">
@@ -710,6 +816,61 @@
       </div>
     </section>
   </div>
+  {:else}
+    <section class="upload-shell">
+      <div class="card card-new-task">
+        <div class="card-header card-header-new-task">
+          <h2 class="card-title">新建上传任务</h2>
+          <div class="card-actions">
+            <button type="button" class="btn btn-primary" on:click={runUploadTask} disabled={uploadState === 'running'}>
+              {uploadState === 'running' ? '上传中...' : '开始上传'}
+            </button>
+          </div>
+        </div>
+        <div class="form-grid form-grid-new-task">
+          <label class="form-label">本地目录</label>
+          <div class="path-row">
+            <div class="path-display path-display-main" class:is-placeholder={!uploadForm.rootPath} title={uploadForm.rootPath || ''}>
+              {uploadForm.rootPath || '未选择'}
+            </div>
+            <button type="button" class="btn btn-outline" on:click={selectUploadRootDir}>选择目录</button>
+          </div>
+
+          <label class="form-label">知识库 URL</label>
+          <div class="path-row">
+            <input type="text" bind:value={uploadForm.bookURL} placeholder="https://www.yuque.com/group/book" />
+          </div>
+
+          <label class="form-label">Login</label>
+          <input type="text" bind:value={uploadForm.login} placeholder="x-login" />
+
+          <label class="form-label">CToken</label>
+          <input type="text" bind:value={uploadForm.ctoken} placeholder="yuque ctoken" />
+
+          <label class="form-label">Cookie</label>
+          <input type="text" bind:value={uploadForm.cookie} placeholder="完整 cookie" />
+
+          <label class="form-label">上传选项</label>
+          <div class="upload-options">
+            <label><input type="checkbox" bind:checked={uploadForm.createCatalogs} /> 创建目录节点</label>
+            <label><input type="checkbox" bind:checked={uploadForm.noMoveDocs} /> 不移动文档</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-upload-progress">
+        <div class="card-header card-header-upload-progress">
+          <h2 class="card-title">任务列表</h2>
+          <div class="upload-progress-line">
+            <span class="upload-progress-count">{uploadProgress.current}/{uploadProgress.total}</span>
+            <span class="upload-progress-kind">{uploadProgress.kind}</span>
+            <span class="upload-progress-path" title={uploadProgress.path}>{uploadProgress.path}</span>
+          </div>
+        </div>
+        <textarea class="upload-log-textarea" readonly value={uploadLogs.join('\n')}></textarea>
+      </div>
+    </section>
+  {/if}
 
   {#if showLinkImportModal}
     <div class="link-import-overlay" on:click={() => (showLinkImportModal = false)}>
@@ -780,13 +941,33 @@ https://www.yuque.com/team/book-b"
   }
 
   .app-header {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
+    gap: 12px 20px;
     padding: 16px 28px;
     background: var(--bg-panel);
     border-bottom: 1px solid var(--line);
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .app-header-upload {
+    grid-template-columns: auto 1fr;
+  }
+
+  .brand {
+    grid-column: 1;
+    justify-self: start;
+    min-width: 0;
+  }
+
+  .header-actions {
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  .app-header-upload .header-actions {
+    grid-column: 2;
   }
 
   .brand-title {
@@ -798,6 +979,64 @@ https://www.yuque.com/team/book-b"
     display: inline-flex;
     align-items: center;
     gap: 10px;
+  }
+
+  .mode-slider {
+    position: relative;
+    width: 120px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--bg-panel);
+    color: var(--text-sub);
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    cursor: pointer;
+    overflow: hidden;
+  }
+
+  .mode-slider-label {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.74rem;
+    font-weight: 600;
+    transition: color 0.2s ease;
+  }
+
+  .mode-slider-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: calc(50% - 2px);
+    height: 26px;
+    border-radius: 999px;
+    background: #4f46e5;
+    transition: transform 0.2s ease;
+  }
+
+  .mode-slider.is-upload .mode-slider-thumb {
+    transform: translateX(58px);
+  }
+
+  .mode-slider .mode-slider-label-left {
+    color: #ffffff;
+  }
+
+  .mode-slider .mode-slider-label-right {
+    color: var(--text-sub);
+  }
+
+  .mode-slider.is-upload .mode-slider-label-left {
+    color: var(--text-sub);
+  }
+
+  .mode-slider.is-upload .mode-slider-label-right {
+    color: #ffffff;
   }
 
   .brand-icon {
@@ -816,8 +1055,12 @@ https://www.yuque.com/team/book-b"
   }
 
   .header-stats {
+    grid-column: 2;
+    justify-self: center;
     display: flex;
     gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .metric {
@@ -1185,6 +1428,15 @@ https://www.yuque.com/team/book-b"
     gap: 24px;
   }
 
+  .upload-shell {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 32px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
   .card {
     background: var(--bg-panel);
     border-radius: 14px;
@@ -1235,6 +1487,57 @@ https://www.yuque.com/team/book-b"
     color: var(--text-sub);
   }
 
+  .card-header-upload-progress {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 10px;
+  }
+
+  .card-header-upload-progress .card-title {
+    width: 100%;
+  }
+
+  .upload-progress-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 14px;
+    font-size: 0.85rem;
+    color: var(--text-sub);
+    max-width: 100%;
+  }
+
+  .upload-progress-count {
+    font-weight: 700;
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .upload-progress-kind {
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #4f46e5;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  :global(.theme-dark) .upload-progress-kind {
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+  }
+
+  .upload-progress-path {
+    flex: 1 1 100%;
+    min-width: 0;
+    text-align: center;
+    word-break: break-all;
+    font-size: 0.8rem;
+    color: var(--text-sub);
+  }
+
   .form-grid {
     display: grid;
     grid-template-columns: 160px 1fr;
@@ -1252,7 +1555,8 @@ https://www.yuque.com/team/book-b"
     padding-top: 10px;
   }
 
-  .form-grid input[type="text"] {
+  .form-grid input[type="text"],
+  .form-grid input[type="number"] {
     padding: 10px 14px;
     border-radius: 8px;
     border: 1px solid var(--line);
@@ -1379,12 +1683,14 @@ https://www.yuque.com/team/book-b"
     border-color: transparent;
   }
 
-  .form-grid input[type="text"]:focus {
+  .form-grid input[type="text"]:focus,
+  .form-grid input[type="number"]:focus {
     outline: 2px solid #6366f1;
     border-color: transparent;
   }
 
-  :global(.theme-dark) .form-grid input[type="text"] {
+  :global(.theme-dark) .form-grid input[type="text"],
+  :global(.theme-dark) .form-grid input[type="number"] {
     background: rgba(2, 6, 23, 0.55);
     border-color: var(--line);
     color: var(--text-main);
@@ -1402,7 +1708,8 @@ https://www.yuque.com/team/book-b"
     color: var(--text-main);
   }
 
-  :global(.theme-dark) .form-grid input[type="text"]::placeholder {
+  :global(.theme-dark) .form-grid input[type="text"]::placeholder,
+  :global(.theme-dark) .form-grid input[type="number"]::placeholder {
     color: var(--text-sub);
     opacity: 0.9;
   }
@@ -1412,9 +1719,31 @@ https://www.yuque.com/team/book-b"
     opacity: 0.9;
   }
 
-  :global(.theme-dark) .form-grid input[type="text"]:focus {
+  :global(.theme-dark) .form-grid input[type="text"]:focus,
+  :global(.theme-dark) .form-grid input[type="number"]:focus {
     background: rgba(15, 23, 42, 0.75);
     border-color: rgba(99, 102, 241, 0.35);
+  }
+
+  .upload-options {
+    display: flex;
+    gap: 16px;
+    color: var(--text-sub);
+    font-size: 0.86rem;
+  }
+
+  .upload-log-textarea {
+    width: 100%;
+    min-height: 240px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    box-sizing: border-box;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+    background: var(--bg-panel);
+    color: var(--text-main);
+    resize: vertical;
   }
 
   :global(.theme-dark) .url-add-count-input:focus {
@@ -1436,6 +1765,13 @@ https://www.yuque.com/team/book-b"
 
   .path-row .path-display-main {
     flex: 1;
+    min-width: 0;
+  }
+
+  .path-row input[type="text"],
+  .path-row input[type="number"] {
+    flex: 1;
+    width: 100%;
     min-width: 0;
   }
 

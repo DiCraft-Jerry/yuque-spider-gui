@@ -92,8 +92,8 @@ jobs:
         run: |
           cd build/bin
           $version = "${{ github.ref_name }}"
-          $filename = "yuque-spider-gui-${version}-windows-amd64.zip"
-          Compress-Archive -Path yuque-spider-gui.exe -DestinationPath $filename
+          $filename = "yuque-manager-gui-${version}-windows-amd64.zip"
+          Compress-Archive -Path yuque-manager-gui.exe -DestinationPath $filename
           echo "ARTIFACT_PATH=build/bin/$filename" >> $env:GITHUB_ENV
           echo "ARTIFACT_NAME=$filename" >> $env:GITHUB_ENV
 
@@ -104,20 +104,20 @@ jobs:
           version="${{ github.ref_name }}"
           if [ "${{ matrix.os }}" == "macos-latest" ]; then
             if [ "${{ matrix.arch }}" == "arm64" ]; then
-              filename="yuque-spider-gui-${version}-darwin-arm64.tar.gz"
+              filename="yuque-manager-gui-${version}-darwin-arm64.tar.gz"
             else
-              filename="yuque-spider-gui-${version}-darwin-amd64.tar.gz"
+              filename="yuque-manager-gui-${version}-darwin-amd64.tar.gz"
             fi
           else
-            filename="yuque-spider-gui-${version}-linux-amd64.tar.gz"
+            filename="yuque-manager-gui-${version}-linux-amd64.tar.gz"
           fi
 
-          if [ -f "yuque-spider-gui.app" ]; then
-            tar -czf $filename yuque-spider-gui.app
-          elif [ -d "yuque-spider-gui.app" ]; then
-            tar -czf $filename yuque-spider-gui.app
+          if [ -f "yuque-manager-gui.app" ]; then
+            tar -czf $filename yuque-manager-gui.app
+          elif [ -d "yuque-manager-gui.app" ]; then
+            tar -czf $filename yuque-manager-gui.app
           else
-            tar -czf $filename yuque-spider-gui
+            tar -czf $filename yuque-manager-gui
           fi
 
           echo "ARTIFACT_PATH=build/bin/$filename" >> $GITHUB_ENV

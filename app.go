@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"yuque-spider-gui/internal/spider"
+	"yuque-spider-gui/internal/uploader"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -17,36 +18,36 @@ import (
 type TaskStatus string
 
 const (
-	TaskStatusPending    TaskStatus = "pending"
-	TaskStatusRunning    TaskStatus = "running"
-	TaskStatusCompleted  TaskStatus = "completed"
-	TaskStatusFailed     TaskStatus = "failed"
-	TaskStatusCancelled  TaskStatus = "cancelled"
+	TaskStatusPending   TaskStatus = "pending"
+	TaskStatusRunning   TaskStatus = "running"
+	TaskStatusCompleted TaskStatus = "completed"
+	TaskStatusFailed    TaskStatus = "failed"
+	TaskStatusCancelled TaskStatus = "cancelled"
 )
 
 // DownloadTaskItem 下载任务项
 type DownloadTaskItem struct {
-	ID          string                   `json:"id"`
-	URL         string                   `json:"url"`
-	Cookie      string                   `json:"cookie"`
-	OutputPath  string                   `json:"outputPath"`
-	Config      spider.Config            `json:"config"`
-	Status      TaskStatus               `json:"status"`
-	Progress    spider.DownloadProgress  `json:"progress"`
-	Error       string                   `json:"error,omitempty"`
-	CreatedAt   time.Time                `json:"createdAt"`
-	StartedAt   *time.Time               `json:"startedAt,omitempty"`
-	CompletedAt *time.Time               `json:"completedAt,omitempty"`
+	ID          string                  `json:"id"`
+	URL         string                  `json:"url"`
+	Cookie      string                  `json:"cookie"`
+	OutputPath  string                  `json:"outputPath"`
+	Config      spider.Config           `json:"config"`
+	Status      TaskStatus              `json:"status"`
+	Progress    spider.DownloadProgress `json:"progress"`
+	Error       string                  `json:"error,omitempty"`
+	CreatedAt   time.Time               `json:"createdAt"`
+	StartedAt   *time.Time              `json:"startedAt,omitempty"`
+	CompletedAt *time.Time              `json:"completedAt,omitempty"`
 	cancelFunc  context.CancelFunc
 	spider      *spider.Spider
 }
 
 // App struct
 type App struct {
-	ctx       context.Context
-	tasks     map[string]*DownloadTaskItem
-	taskOrder []string // 保持任务顺序
-	mu        sync.RWMutex
+	ctx           context.Context
+	tasks         map[string]*DownloadTaskItem
+	taskOrder     []string // 保持任务顺序
+	mu            sync.RWMutex
 	taskIDCounter int
 }
 
@@ -75,6 +76,99 @@ func (a *App) SelectDirectory() (string, error) {
 		Title: "选择下载目录",
 	})
 	return dir, err
+}
+
+// SelectUploadDirectory 选择上传目录
+func (a *App) SelectUploadDirectory() (string, error) {
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "选择上传目录",
+	})
+	return dir, err
+}
+
+// ResolveUploadBookIDByURL 从知识库 URL 解析 book_id
+func (a *App) ResolveUploadBookIDByURL(bookURL, cookie string) (int, error) {
+	if bookURL == "" {
+		return 0, fmt.Errorf("知识库 URL 不能为空")
+	}
+	fetcher := spider.NewFetcher(cookie, spider.DefaultConfig())
+	data, err := fetcher.FetchBookData(bookURL)
+	if err != nil {
+		return 0, fmt.Errorf("解析 book_id 失败: %w", err)
+	}
+	if data == nil || data.Book.ID <= 0 {
+		return 0, fmt.Errorf("未获取到有效 book_id")
+	}
+	return data.Book.ID, nil
+}
+
+// UploadConfig 上传配置
+type UploadConfig struct {
+	RootPath        string  `json:"rootPath"`
+	BookURL         string  `json:"bookURL"`
+	BaseURL         string  `json:"baseURL"`
+	BookID          int     `json:"bookID"`
+	Referer         string  `json:"referer"`
+	Login           string  `json:"login"`
+	CToken          string  `json:"ctoken"`
+	Cookie          string  `json:"cookie"`
+	CreateCatalogs  bool    `json:"createCatalogs"`
+	NoMoveDocs      bool    `json:"noMoveDocs"`
+	Limit           int     `json:"limit"`
+	SleepMinSeconds float64 `json:"sleepMinSeconds"`
+	SleepMaxSeconds float64 `json:"sleepMaxSeconds"`
+}
+
+// RunUpload 执行上传任务
+func (a *App) RunUpload(cfg UploadConfig) error {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = "https://www.yuque.com"
+	}
+	if cfg.BookID <= 0 {
+		if cfg.BookURL == "" {
+			return fmt.Errorf("知识库 URL 不能为空")
+		}
+		resolvedID, err := a.ResolveUploadBookIDByURL(cfg.BookURL, cfg.Cookie)
+		if err != nil {
+			return err
+		}
+		cfg.BookID = resolvedID
+	}
+	if cfg.Referer == "" {
+		cfg.Referer = cfg.BookURL
+	}
+	if cfg.SleepMaxSeconds <= 0 {
+		cfg.SleepMinSeconds = 1
+		cfg.SleepMaxSeconds = 3
+	}
+
+	u := uploader.New(uploader.UploadConfig{
+		RootPath:        cfg.RootPath,
+		BaseURL:         cfg.BaseURL,
+		BookID:          cfg.BookID,
+		Referer:         cfg.Referer,
+		Login:           cfg.Login,
+		CToken:          cfg.CToken,
+		Cookie:          cfg.Cookie,
+		CreateCatalogs:  cfg.CreateCatalogs,
+		NoMoveDocs:      cfg.NoMoveDocs,
+		Limit:           cfg.Limit,
+		SleepMinSeconds: cfg.SleepMinSeconds,
+		SleepMaxSeconds: cfg.SleepMaxSeconds,
+	})
+
+	runtime.EventsEmit(a.ctx, "upload:state", map[string]any{"status": "running"})
+	err := u.Run(func(p uploader.Progress) {
+		runtime.EventsEmit(a.ctx, "upload:progress", p)
+	}, func(line string) {
+		runtime.EventsEmit(a.ctx, "upload:log", line)
+	})
+	if err != nil {
+		runtime.EventsEmit(a.ctx, "upload:state", map[string]any{"status": "failed", "error": err.Error()})
+		return err
+	}
+	runtime.EventsEmit(a.ctx, "upload:state", map[string]any{"status": "completed"})
+	return nil
 }
 
 // AddTask 添加任务
